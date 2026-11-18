@@ -24,10 +24,9 @@ import com.nexauren.keyboardnex.MainActivity
 import com.nexauren.keyboardnex.clipboard.ClipboardStore
 
 class NexInputMethodService : InputMethodService() {
-    private val dark = Color.rgb(10, 12, 25)
-    private val keyColor = Color.rgb(31, 35, 59)
-    private val textColor = Color.rgb(245, 246, 255)
-    private val muted = Color.rgb(169, 176, 204)
+    private val keyColor: Int get() = if (themeName() == "Minimal Light") Color.rgb(244, 246, 252) else Color.rgb(31, 35, 59)
+    private val textColor: Int get() = if (themeName() == "Minimal Light") Color.rgb(28, 32, 49) else Color.rgb(245, 246, 255)
+    private val muted: Int get() = if (themeName() == "Minimal Light") Color.rgb(91, 99, 124) else Color.rgb(169, 176, 204)
     private var shifted = false
     private var numberMode = false
     private var root: LinearLayout? = null
