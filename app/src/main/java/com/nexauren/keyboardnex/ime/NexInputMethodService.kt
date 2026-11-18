@@ -199,7 +199,9 @@ class NexInputMethodService : InputMethodService() {
                 }
                 button.setOnClickListener {
                     animatePress(button)
-                    button.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+                    val hapticsEnabled = getSharedPreferences(ClipboardStore.SETTINGS, Context.MODE_PRIVATE)
+                        .getBoolean("haptics_enabled", true)
+                    if (hapticsEnabled) button.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
                     handleKey(value)
                 }
                 if (value == "⌫") {
