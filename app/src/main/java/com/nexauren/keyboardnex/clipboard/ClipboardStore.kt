@@ -27,8 +27,10 @@ object ClipboardStore {
         if (cleanText.isEmpty() || !isAutoCaptureEnabled(context)) return
 
         val prefs = context.getSharedPreferences(STORE, Context.MODE_PRIVATE)
-        val current = read(context).toMutableList()
-        if (current.firstOrNull()?.text == cleanText) return
+        val existing = read(context)
+        // Never replace a pinned item with a newer, expiring copy of the same text.
+        if (existing.any { it.text == cleanText && it.pinned }) return
+        val current = existing.filterNot { it.text == cleanText }.toMutableList()
 
         val now = System.currentTimeMillis()
         val ttl = context.getSharedPreferences(SETTINGS, Context.MODE_PRIVATE)
@@ -46,7 +48,6 @@ object ClipboardStore {
         )
 
         val trimmed = current
-            .distinctBy { it.text }
             .let { entries ->
                 val pinned = entries.filter { it.pinned }
                 val recent = entries.filterNot { it.pinned }.take((MAX_ITEMS - pinned.size).coerceAtLeast(0))
@@ -75,13 +76,13 @@ object ClipboardStore {
 
     fun setPinned(context: Context, ids: Set<String>, pinned: Boolean) {
         val now = System.currentTimeMillis()
+        val ttl = context.getSharedPreferences(SETTINGS, Context.MODE_PRIVATE)
+            .getLong("clip_ttl_ms", 60L * 60L * 1000L)
         val updated = read(context).map {
             if (it.id in ids) {
                 it.copy(
                     pinned = pinned,
-                    expiresAt = if (pinned) null else now + context
-                        .getSharedPreferences(SETTINGS, Context.MODE_PRIVATE)
-                        .getLong("clip_ttl_ms", 60L * 60L * 1000L)
+                    expiresAt = if (pinned) null else now + ttl
                 )
             } else it
         }
