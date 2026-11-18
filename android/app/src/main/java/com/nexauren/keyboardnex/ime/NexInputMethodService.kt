@@ -1147,7 +1147,7 @@ class NexInputMethodService : InputMethodService() {
             setHintTextColor(muted)
         }
         content.addView(nameInput)
-        val sequence = StringBuilder()
+        val selectedEmojis = mutableListOf<String>()
         val preview = TextView(this).apply {
             text = "Escolhe os emojis abaixo"
             textSize = 25f
@@ -1174,8 +1174,8 @@ class NexInputMethodService : InputMethodService() {
                         setMargins(dp(2), dp(2), dp(2), dp(2))
                     }
                     setOnClickListener {
-                        if (sequence.length < 40) sequence.append(emoji)
-                        preview.text = sequence.toString().ifEmpty { "Escolhe os emojis abaixo" }
+                        if (selectedEmojis.joinToString("").length < 40) selectedEmojis.add(emoji)
+                        preview.text = selectedEmojis.joinToString("").ifEmpty { "Escolhe os emojis abaixo" }
                     }
                 }
                 row.addView(button)
@@ -1188,14 +1188,13 @@ class NexInputMethodService : InputMethodService() {
         ))
         val controls = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
         controls.addView(smallButton("Apagar último") {
-            if (sequence.isNotEmpty()) {
-                val last = Character.offsetByCodePoints(sequence, sequence.length, -1)
-                sequence.delete(last, sequence.length)
-                preview.text = sequence.toString().ifEmpty { "Escolhe os emojis abaixo" }
+            if (selectedEmojis.isNotEmpty()) {
+                selectedEmojis.removeAt(selectedEmojis.lastIndex)
+                preview.text = selectedEmojis.joinToString("").ifEmpty { "Escolhe os emojis abaixo" }
             }
         })
         controls.addView(smallButton("Limpar") {
-            sequence.clear()
+            selectedEmojis.clear()
             preview.text = "Escolhe os emojis abaixo"
         })
         content.addView(controls)
@@ -1208,7 +1207,7 @@ class NexInputMethodService : InputMethodService() {
         dialog.setOnShowListener {
             dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
                 val name = nameInput.text.toString().trim()
-                val emoji = sequence.toString()
+                val emoji = selectedEmojis.joinToString("")
                 if (name.isBlank() || emoji.isBlank()) {
                     Toast.makeText(this, "Escolhe um nome e pelo menos um emoji.", Toast.LENGTH_SHORT).show()
                 } else {
