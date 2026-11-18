@@ -624,7 +624,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             child: Padding(
               padding: const EdgeInsets.symmetric(vertical: 3),
               child: DropdownButtonFormField<int>(
-                value: ttlOptions.containsKey(_ttl) ? _ttl : 3600000,
+                initialValue: ttlOptions.containsKey(_ttl) ? _ttl : 3600000,
                 decoration: const InputDecoration(labelText: 'Apagar textos não fixados após', border: InputBorder.none),
                 items: ttlOptions.entries.map((entry) => DropdownMenuItem<int>(value: entry.key, child: Text(entry.value))).toList(),
                 onChanged: (value) {
@@ -670,7 +670,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           const SizedBox(height: 9),
           _PreferenceCard(
             child: DropdownButtonFormField<String>(
-              value: _height,
+              initialValue: _height,
               decoration: const InputDecoration(labelText: 'Altura do teclado', border: InputBorder.none),
               items: const <DropdownMenuItem<String>>[
                 DropdownMenuItem(value: 'compact', child: Text('Compacta')),
