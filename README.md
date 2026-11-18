@@ -11,7 +11,7 @@ Keyboard Nex is an Android keyboard with a Flutter companion interface and a nat
 - Local storage: Android SharedPreferences for keyboard settings and clipboard history.
 - Platform channel: connects the companion interface to the native keyboard.
 
-The project intentionally uses Flutter's built-in Material widgets and has no additional Dart runtime packages.
+The project uses the Flutter-compatible Material UI package for its companion interface; Android size reduction is handled by release shrinking, resource optimization and icon tree-shaking.
 
 ## Current foundation
 
