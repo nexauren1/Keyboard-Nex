@@ -16,6 +16,12 @@ import android.view.HapticFeedbackConstants
 import android.view.View
 import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputConnection
+import android.view.textservice.SentenceSuggestionsInfo
+import android.view.textservice.SpellCheckerSession
+import android.view.textservice.SuggestionsInfo
+import android.view.textservice.TextInfo
+import android.view.textservice.TextServicesManager
+import java.util.Locale
 import android.text.InputType
 import android.inputmethodservice.InputMethodService
 import android.widget.CheckBox
@@ -34,6 +40,12 @@ class NexInputMethodService : InputMethodService() {
     private var shifted = false
     private var numberMode = false
     private var lastSpacePressAt = 0L
+    private val composingWord = StringBuilder()
+    private var suggestionStrip: LinearLayout? = null
+    private var currentSuggestions: List<String> = emptyList()
+    private var currentWordIsTypo = false
+    private var spellCheckerSession: SpellCheckerSession? = null
+    private var suggestionRequestSequence = 0
     private var root: LinearLayout? = null
     private val selectedClipIds = linkedSetOf<String>()
     private lateinit var clipboardManager: ClipboardManager
@@ -41,6 +53,42 @@ class NexInputMethodService : InputMethodService() {
 
     private val clipboardListener = ClipboardManager.OnPrimaryClipChangedListener {
         captureCurrentClipboard()
+    }
+
+    private val spellCheckerListener = object : SpellCheckerSession.SpellCheckerSessionListener {
+        override fun onGetSuggestions(results: Array<out SuggestionsInfo>?) {
+            // Sentence suggestions are used below; this callback is retained for API compatibility.
+        }
+
+        override fun onGetSentenceSuggestions(results: Array<out SentenceSuggestionsInfo>?) {
+            val suggestionInfo = results.orEmpty()
+                .asSequence()
+                .flatMap { sentence ->
+                    (0 until sentence.suggestionsCount).asSequence()
+                        .mapNotNull { sentence.getSuggestionsInfoAt(it) }
+                }
+                .firstOrNull { it.sequence == suggestionRequestSequence }
+
+            val suggestions = if (suggestionInfo == null) {
+                emptyList()
+            } else {
+                (0 until suggestionInfo.suggestionsCount.coerceAtLeast(0))
+                    .mapNotNull { index -> suggestionInfo.getSuggestionAt(index) }
+                    .filter { it.isNotBlank() }
+                    .distinct()
+                    .take(3)
+            }
+            val isTypo = suggestionInfo != null &&
+                suggestionInfo.getSuggestionsAttributes() and
+                SuggestionsInfo.RESULT_ATTR_LOOKS_LIKE_TYPO != 0
+
+            runOnUiThread {
+                if (composingWord.isEmpty() || isPrivateEditor()) return@runOnUiThread
+                currentSuggestions = suggestions
+                currentWordIsTypo = isTypo
+                renderSuggestionStrip()
+            }
+        }
     }
 
     override fun onCreate() {
@@ -60,10 +108,26 @@ class NexInputMethodService : InputMethodService() {
             listenerRegistered = true
         }
         captureCurrentClipboard()
+        composingWord.clear()
+        currentSuggestions = emptyList()
+        currentWordIsTypo = false
+        ensureSpellChecker()
+        showKeyboard()
+    }
+
+    override fun onWindowShown() {
+        super.onWindowShown()
+        ensureSpellChecker()
         showKeyboard()
     }
 
     override fun onFinishInputView(finishingInput: Boolean) {
+        currentInputConnection?.finishComposingText()
+        composingWord.clear()
+        currentSuggestions = emptyList()
+        currentWordIsTypo = false
+        spellCheckerSession?.close()
+        spellCheckerSession = null
         if (listenerRegistered) {
             clipboardManager.removePrimaryClipChangedListener(clipboardListener)
             listenerRegistered = false
@@ -76,6 +140,8 @@ class NexInputMethodService : InputMethodService() {
             clipboardManager.removePrimaryClipChangedListener(clipboardListener)
             listenerRegistered = false
         }
+        spellCheckerSession?.close()
+        spellCheckerSession = null
         super.onDestroy()
     }
 
@@ -116,6 +182,85 @@ class NexInputMethodService : InputMethodService() {
         }
     }
 
+    private fun ensureSpellChecker() {
+        if (spellCheckerSession != null || isPrivateEditor()) return
+        val prefs = getSharedPreferences(ClipboardStore.SETTINGS, Context.MODE_PRIVATE)
+        if (!prefs.getBoolean("suggestions_enabled", true)) return
+        val manager = getSystemService(Context.TEXT_SERVICES_MANAGER_SERVICE) as? TextServicesManager ?: return
+        val locale: Locale? = when (prefs.getString("keyboard_language", "system")) {
+            "pt" -> Locale("pt")
+            "en" -> Locale.ENGLISH
+            else -> null
+        }
+        spellCheckerSession = try {
+            manager.newSpellCheckerSession(null, locale, spellCheckerListener, true)
+        } catch (_: RuntimeException) {
+            null
+        }
+    }
+
+    private fun requestWordSuggestions() {
+        val word = composingWord.toString()
+        val prefs = getSharedPreferences(ClipboardStore.SETTINGS, Context.MODE_PRIVATE)
+        if (word.length < 2 || isPrivateEditor() ||
+            !prefs.getBoolean("suggestions_enabled", true)
+        ) {
+            currentSuggestions = emptyList()
+            currentWordIsTypo = false
+            renderSuggestionStrip()
+            return
+        }
+        ensureSpellChecker()
+        val session = spellCheckerSession
+        if (session == null) {
+            renderSuggestionStrip()
+            return
+        }
+        val sequence = ++suggestionRequestSequence
+        try {
+            session.getSentenceSuggestions(arrayOf(TextInfo(word, 0, sequence)), 3)
+        } catch (_: RuntimeException) {
+            currentSuggestions = emptyList()
+            currentWordIsTypo = false
+            renderSuggestionStrip()
+        }
+    }
+
+    private fun renderSuggestionStrip() {
+        val strip = suggestionStrip ?: return
+        strip.removeAllViews()
+        if (composingWord.isEmpty() || isPrivateEditor()) {
+            strip.visibility = View.GONE
+            return
+        }
+        strip.visibility = View.VISIBLE
+        val choices = (listOf(composingWord.toString()) + currentSuggestions)
+            .distinct()
+            .take(3)
+        choices.forEachIndexed { index, candidate ->
+            val item = label(candidate, 14, if (index == 0) textColor else muted, index == 0).apply {
+                gravity = Gravity.CENTER
+                isClickable = true
+                isFocusable = true
+                setPadding(dp(5), 0, dp(5), 0)
+                setOnClickListener { applySuggestion(candidate) }
+            }
+            strip.addView(item, LinearLayout.LayoutParams(0, dp(32), 1f))
+        }
+        while (strip.childCount < 3) {
+            strip.addView(View(this), LinearLayout.LayoutParams(0, dp(32), 1f))
+        }
+    }
+
+    private fun applySuggestion(candidate: String) {
+        val connection = currentInputConnection ?: return
+        connection.commitText(candidate, 1)
+        composingWord.clear()
+        currentSuggestions = emptyList()
+        currentWordIsTypo = false
+        renderSuggestionStrip()
+    }
+
     private fun buildKeyboard() {
         root = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -148,10 +293,20 @@ class NexInputMethodService : InputMethodService() {
         addTool(toolbar, "🎨", "Temas") { showThemePanel() }
         addTool(toolbar, "⚙", "Definições") { openSettings() }
         host.addView(toolbar, LinearLayout.LayoutParams(
-            LinearLayout.LayoutParams.MATCH_PARENT, dp(42)
+            LinearLayout.LayoutParams.MATCH_PARENT, dp(38)
         ))
+        suggestionStrip = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER
+            visibility = View.GONE
+            setPadding(dp(4), 0, dp(4), 0)
+        }
+        host.addView(suggestionStrip, LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT, dp(32)
+        ))
+        renderSuggestionStrip()
 
-        // Remove the static brand row so more screen space is available for keys.
+        // Keep the key area taller by avoiding a static brand row.
         val keyboardPrefs = getSharedPreferences(ClipboardStore.SETTINGS, Context.MODE_PRIVATE)
         val showEmojiKey = keyboardPrefs.getBoolean("emoji_key_enabled", true)
         val showLanguageKey = keyboardPrefs.getBoolean("language_switch_key_enabled", false)
@@ -236,7 +391,12 @@ class NexInputMethodService : InputMethodService() {
                 }
                 if (value == "⌫") {
                     button.setOnLongClickListener {
+                        currentInputConnection?.finishComposingText()
+                        composingWord.clear()
+                        currentSuggestions = emptyList()
+                        currentWordIsTypo = false
                         currentInputConnection?.deleteSurroundingText(30, 0)
+                        renderSuggestionStrip()
                         true
                     }
                 } else if (keyboardPrefs.getBoolean("long_press_symbols_enabled", true)) {
@@ -282,11 +442,22 @@ class NexInputMethodService : InputMethodService() {
                 }
             }
             "ESPAÇO" -> {
+                val prefs = getSharedPreferences(ClipboardStore.SETTINGS, Context.MODE_PRIVATE)
+                val autoCorrect = prefs.getBoolean("auto_correct_enabled", false)
+                val correction = if (autoCorrect && currentWordIsTypo) currentSuggestions.firstOrNull() else null
+                if (correction != null && !isPrivateEditor()) {
+                    connection.commitText(correction, 1)
+                } else {
+                    connection.finishComposingText()
+                }
+                composingWord.clear()
+                currentSuggestions = emptyList()
+                currentWordIsTypo = false
+                renderSuggestionStrip()
+
                 val now = System.currentTimeMillis()
                 val previous = connection.getTextBeforeCursor(1, 0)?.toString().orEmpty()
-                val doubleSpaceEnabled = getSharedPreferences(
-                    ClipboardStore.SETTINGS, Context.MODE_PRIVATE
-                ).getBoolean("double_space_period_enabled", true)
+                val doubleSpaceEnabled = prefs.getBoolean("double_space_period_enabled", true)
                 if (doubleSpaceEnabled && !isPrivateEditor() &&
                     previous == " " && now - lastSpacePressAt in 1L..500L
                 ) {
@@ -300,6 +471,11 @@ class NexInputMethodService : InputMethodService() {
                 shifted = false
             }
             "↵" -> {
+                connection.finishComposingText()
+                composingWord.clear()
+                currentSuggestions = emptyList()
+                currentWordIsTypo = false
+                renderSuggestionStrip()
                 val action = currentInputEditorInfo?.imeOptions?.and(EditorInfo.IME_MASK_ACTION)
                     ?: EditorInfo.IME_ACTION_NONE
                 if (action != EditorInfo.IME_ACTION_NONE && sendDefaultEditorAction(true)) return
@@ -317,7 +493,18 @@ class NexInputMethodService : InputMethodService() {
                             beforeCursor[beforeCursor.lastIndex - 1] in ".!?" &&
                             beforeCursor.last() == ' '))
                 val output = if (shifted || shouldCapitalizeSentence) value.uppercase() else value
-                connection.commitText(output, 1)
+                if (value.length == 1 && value[0].isLetter() && !isPrivateEditor()) {
+                    composingWord.append(output)
+                    connection.setComposingText(composingWord.toString(), 1)
+                    requestWordSuggestions()
+                } else {
+                    connection.finishComposingText()
+                    composingWord.clear()
+                    currentSuggestions = emptyList()
+                    currentWordIsTypo = false
+                    connection.commitText(output, 1)
+                    renderSuggestionStrip()
+                }
                 if (shifted) {
                     shifted = false
                     showKeyboard()
@@ -327,6 +514,20 @@ class NexInputMethodService : InputMethodService() {
     }
 
     private fun deleteBeforeCursor(connection: InputConnection) {
+        if (composingWord.isNotEmpty() && !isPrivateEditor()) {
+            composingWord.deleteCharAt(composingWord.length - 1)
+            if (composingWord.isEmpty()) {
+                connection.setComposingText("", 1)
+                connection.finishComposingText()
+                currentSuggestions = emptyList()
+                currentWordIsTypo = false
+            } else {
+                connection.setComposingText(composingWord.toString(), 1)
+                requestWordSuggestions()
+            }
+            renderSuggestionStrip()
+            return
+        }
         val selected = connection.getSelectedText(0)
         if (!selected.isNullOrEmpty()) {
             connection.commitText("", 1)
