@@ -1164,6 +1164,11 @@ class NexInputMethodService : InputMethodService() {
         content.addView(scroll, LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.MATCH_PARENT, dp(330)
         ))
+        val dialog = AlertDialog.Builder(this)
+            .setTitle("Escolher do catálogo completo")
+            .setView(content)
+            .setNegativeButton("Fechar", null)
+            .create()
         var visibleCount = 160
         lateinit var render: () -> Unit
         render = {
@@ -1202,11 +1207,6 @@ class NexInputMethodService : InputMethodService() {
                 })
             }
         }
-        val dialog = AlertDialog.Builder(this)
-            .setTitle("Escolher do catálogo completo")
-            .setView(content)
-            .setNegativeButton("Fechar", null)
-            .create()
         search.addTextChangedListener(object : TextWatcher {
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
