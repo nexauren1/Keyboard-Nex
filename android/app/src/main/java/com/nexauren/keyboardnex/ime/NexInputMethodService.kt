@@ -11,6 +11,7 @@ import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.os.Build
 import android.view.Gravity
+import android.view.KeyEvent
 import android.view.HapticFeedbackConstants
 import android.view.View
 import android.view.inputmethod.EditorInfo
@@ -544,23 +545,103 @@ class NexInputMethodService : InputMethodService() {
 
     private fun showToolsPanel() {
         val host = root ?: return
-        host.removeAllViews()
         val panel = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(12), dp(8), dp(12), dp(8))
+            setPadding(dp(12), dp(7), dp(12), dp(8))
         }
         val header = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
         }
-        header.addView(label("Ferramentas rápidas", 16, textColor, true), LinearLayout.LayoutParams(0, dp(40), 1f))
+        header.addView(label("Ferramentas rápidas", 16, textColor, true),
+            LinearLayout.LayoutParams(0, dp(40), 1f))
         header.addView(smallButton("Voltar") { showKeyboard() })
         panel.addView(header)
-        panel.addView(smallButton("Abrir definições do Keyboard Nex") { openSettings() })
-        panel.addView(label("Planeado: snippets, tradução, edição de texto, cursor por gestos, pesquisa de GIFs e ditado por voz.", 12, muted).apply {
-            setPadding(dp(4), dp(10), dp(4), dp(4))
+
+        val editRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        editRow.addView(smallButton("Editar texto") { showTextEditingPanel() })
+        editRow.addView(smallButton("Área de transferência") { showClipboardPanel() })
+        panel.addView(editRow)
+
+        val quickRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        quickRow.addView(smallButton("Emojis") { showEmojiPanel() })
+        quickRow.addView(smallButton("Temas") { showThemePanel() })
+        quickRow.addView(smallButton("Definições") { openSettings() })
+        panel.addView(quickRow)
+
+        panel.addView(label(
+            "As ações de edição funcionam no campo de texto ativo. O teclado não recolhe o conteúdo para servidores.",
+            11, muted
+        ).apply { setPadding(dp(4), dp(10), dp(4), 0) })
+        transitionPanel(panel)
+    }
+
+    private fun showTextEditingPanel() {
+        val host = root ?: return
+        val panel = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(12), dp(7), dp(12), dp(8))
+        }
+        val header = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        header.addView(label("Edição de texto", 16, textColor, true),
+            LinearLayout.LayoutParams(0, dp(40), 1f))
+        header.addView(smallButton("Voltar") { showToolsPanel() })
+        panel.addView(header)
+
+        val connection = currentInputConnection
+        val selectRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        selectRow.addView(smallButton("Selecionar tudo") {
+            currentInputConnection?.performContextMenuAction(android.R.id.selectAll)
         })
-        host.addView(panel)
+        selectRow.addView(smallButton("Copiar") {
+            currentInputConnection?.performContextMenuAction(android.R.id.copy)
+        })
+        selectRow.addView(smallButton("Cortar") {
+            currentInputConnection?.performContextMenuAction(android.R.id.cut)
+        })
+        selectRow.addView(smallButton("Colar") {
+            currentInputConnection?.performContextMenuAction(android.R.id.paste)
+        })
+        panel.addView(selectRow)
+
+        val cursorTitle = label("Mover cursor", 13, muted, true).apply {
+            setPadding(dp(4), dp(11), dp(4), dp(3))
+        }
+        panel.addView(cursorTitle)
+        val cursorRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        cursorRow.addView(smallButton("← Esquerda") { moveCursor(KeyEvent.KEYCODE_DPAD_LEFT) })
+        cursorRow.addView(smallButton("Direita →") { moveCursor(KeyEvent.KEYCODE_DPAD_RIGHT) })
+        cursorRow.addView(smallButton("Apagar palavra") {
+            currentInputConnection?.deleteSurroundingText(30, 0)
+        })
+        panel.addView(cursorRow)
+
+        val caseRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        caseRow.addView(smallButton("MAIÚSCULAS") {
+            val selected = currentInputConnection?.getSelectedText(0)?.toString()
+            if (!selected.isNullOrEmpty()) currentInputConnection?.commitText(selected.uppercase(), 1)
+        })
+        caseRow.addView(smallButton("minúsculas") {
+            val selected = currentInputConnection?.getSelectedText(0)?.toString()
+            if (!selected.isNullOrEmpty()) currentInputConnection?.commitText(selected.lowercase(), 1)
+        })
+        panel.addView(caseRow)
+
+        panel.addView(label(
+            if (connection == null) "Nenhum campo de texto está ativo." else
+                "Seleciona primeiro um texto para usar as opções de cópia e maiúsculas.",
+            11, muted
+        ).apply { setPadding(dp(4), dp(9), dp(4), 0) })
+        transitionPanel(panel)
+    }
+
+    private fun moveCursor(keyCode: Int) {
+        val connection = currentInputConnection ?: return
+        connection.sendKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, keyCode))
+        connection.sendKeyEvent(KeyEvent(KeyEvent.ACTION_UP, keyCode))
     }
 
     private fun showThemePanel() {
