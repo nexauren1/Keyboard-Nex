@@ -60,7 +60,7 @@ class SettingsActivity : Activity() {
         option("☷", "Preferências", "Altura do teclado, vibração e comportamento das teclas") {
             showPreferences()
         }
-        option("◉", "Tema", currentTheme(), "Escolha um dos temas disponíveis") {
+        option("◉", "Tema", currentTheme() + " · Escolha uma aparência") {
             chooseTheme()
         }
         option("A✓", "Correções e sugestões", "Motor de escrita em desenvolvimento") {
