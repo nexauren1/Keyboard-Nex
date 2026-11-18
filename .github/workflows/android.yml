@@ -1,10 +1,10 @@
-name: Android build
+name: Keyboard Nex Flutter Android build
 
 on:
   push:
-    branches: [ "main" ]
+    branches: [main]
   pull_request:
-    branches: [ "main" ]
+    branches: [main]
   workflow_dispatch:
 
 jobs:
@@ -20,19 +20,36 @@ jobs:
           distribution: temurin
           java-version: "17"
 
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "3.50.0"
+          channel: stable
+          cache: true
+
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
-          gradle-version: "8.9"
+          gradle-version: "8.14.3"
 
-      - name: Generate Gradle wrapper
-        run: gradle wrapper --gradle-version 8.9
+      - name: Configure Flutter SDK and Gradle wrapper
+        working-directory: android
+        run: |
+          FLUTTER_ROOT="$(dirname "$(dirname "$(readlink -f "$(command -v flutter)")")")"
+          printf "flutter.sdk=%s\n" "$FLUTTER_ROOT" > local.properties
+          gradle wrapper --gradle-version 8.14.3
+
+      - name: Resolve Dart dependencies
+        run: flutter pub get
+
+      - name: Analyze Dart code
+        run: flutter analyze
 
       - name: Build debug APK
-        run: ./gradlew :app:assembleDebug
+        run: flutter build apk --debug
 
       - name: Upload debug APK
         uses: actions/upload-artifact@v4
         with:
           name: keyboard-nex-debug
-          path: app/build/outputs/apk/debug/app-debug.apk
+          path: build/app/outputs/flutter-apk/app-debug.apk
