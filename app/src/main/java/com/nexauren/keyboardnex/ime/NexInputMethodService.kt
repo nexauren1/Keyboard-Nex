@@ -1,5 +1,6 @@
 package com.nexauren.keyboardnex.ime
 
+import android.app.AlertDialog
 import android.content.ClipDescription
 import android.content.ClipboardManager
 import android.content.Context
@@ -315,6 +316,18 @@ class NexInputMethodService : InputMethodService() {
                 selectedClipIds.clear()
                 showClipboardPanel()
             }
+        })
+        actionRow.addView(smallButton("Limpar tudo") {
+            AlertDialog.Builder(this@NexInputMethodService)
+                .setTitle("Limpar área de transferência?")
+                .setMessage("Todos os itens guardados, incluindo os fixados, serão eliminados.")
+                .setNegativeButton("Cancelar", null)
+                .setPositiveButton("Limpar") { _, _ ->
+                    ClipboardStore.clear(this@NexInputMethodService)
+                    selectedClipIds.clear()
+                    showClipboardPanel()
+                }
+                .show()
         })
         actions.addView(actionRow)
         panel.addView(actions)
