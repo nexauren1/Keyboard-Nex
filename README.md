@@ -6,29 +6,44 @@ Keyboard Nex is an Android keyboard with a Flutter companion interface and a nat
 
 ## Technology
 
-- Flutter Material SDK: companion dashboard, themes, clipboard manager and preferences.
+- Flutter Material UI: companion dashboard, theme gallery, clipboard manager and preferences.
 - Kotlin: Android keyboard service, text input and system integration.
-- Local storage: Android SharedPreferences for keyboard settings and clipboard history.
+- Android system spell checker: local word suggestions and spelling alternatives where a compatible dictionary is enabled on the device.
+- Local storage: Android SharedPreferences for keyboard settings, recent emojis and clipboard history.
 - Platform channel: connects the companion interface to the native keyboard.
 
-The project uses the Flutter-compatible Material UI package for its companion interface; Android size reduction is handled by release shrinking, resource optimization and icon tree-shaking.
+The keyboard does not bundle a large dictionary, download language packs or send typed text to a Nexauren server.
 
-## Current foundation
+## Keyboard features
 
-- Native Android QWERTY keyboard with letters, numbers, symbols, shift, delete and enter.
-- Companion dashboard with Android keyboard setup shortcuts.
+- Three keyboard layouts: QWERTY, QWERTZ and AZERTY.
+- Optional number row.
+- Configurable emoji, language-switch, comma and period keys.
+- Shift, double-tap Caps Lock, long-press Caps Lock, delete and enter.
+- Long-press Q–P to type numbers.
+- Double-space period.
+- Swipe on the spacebar to move the text cursor.
+- Sentence capitalization for fields that request it.
+- Word suggestions and spelling alternatives from the Android system spell checker.
+- Optional autocorrection, disabled by default.
+- Suggestion language preference: device default, Portuguese or English. Actual availability depends on the spell checker and dictionaries installed on Android.
+- Emoji categories and locally stored recent emojis.
 - Four built-in themes: Neon Violet, Midnight Blue, Ocean Cyan and Minimal Light.
+
+## Companion app and clipboard
+
+- Companion dashboard with Android keyboard setup shortcuts.
 - Clipboard manager with search, filters, multi-selection, batch pin/unpin, edit, delete and clear-all.
 - Configurable retention for unpinned clipboard entries: 5 minutes, 15 minutes, 30 minutes, 1 hour, 24 hours or 7 days.
 - Pinned clips do not expire automatically.
 - Preferences for automatic clipboard capture, vibration, key sounds and keyboard height.
 - Local-first storage; no account or cloud sync is required.
 
-## Privacy and clipboard behaviour
+## Privacy
 
-Clipboard history is stored in app-private Android preferences. The keyboard avoids capturing password fields and fields marked as not personalized. On Android 13 and later, it also checks the system clipboard's sensitive-content flag. Android may apply its own clipboard visibility and clearing rules; Keyboard Nex cannot override those operating-system controls.
+Clipboard history, recent emojis and keyboard preferences are stored locally in app-private Android preferences. The keyboard avoids capturing password fields and fields marked as not personalized. On Android 13 and later, it also checks the system clipboard's sensitive-content flag. Android may apply its own clipboard visibility and clearing rules; Keyboard Nex cannot override those operating-system controls.
 
-The configured retention period applies to Keyboard Nex's internal history. Pinned entries are exempt from automatic expiry.
+Spell suggestions use the Android spell-checking service configured on the device. Results and language availability depend on that service. Autocorrection is optional and disabled by default.
 
 ## Photo themes
 
