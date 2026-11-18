@@ -40,6 +40,8 @@ class NexInputMethodService : InputMethodService() {
     private val textColor: Int get() = if (themeName() == "Minimal Light") Color.rgb(28, 32, 49) else Color.rgb(245, 246, 255)
     private val muted: Int get() = if (themeName() == "Minimal Light") Color.rgb(91, 99, 124) else Color.rgb(169, 176, 204)
     private var shifted = false
+    private var capsLocked = false
+    private var lastShiftTapAt = 0L
     private var numberMode = false
     private var lastSpacePressAt = 0L
     private val composingWord = StringBuilder()
@@ -111,6 +113,9 @@ class NexInputMethodService : InputMethodService() {
             listenerRegistered = true
         }
         captureCurrentClipboard()
+        shifted = false
+        capsLocked = false
+        lastShiftTapAt = 0L
         composingWord.clear()
         currentSuggestions = emptyList()
         currentWordIsTypo = false
@@ -405,7 +410,15 @@ class NexInputMethodService : InputMethodService() {
                     }
                     handleKey(value)
                 }
-                if (value == "⌫") {
+                if (value == "⇧") {
+                    button.setOnLongClickListener {
+                        capsLocked = !capsLocked
+                        shifted = capsLocked
+                        lastShiftTapAt = 0L
+                        showKeyboard()
+                        true
+                    }
+                } else if (value == "⌫") {
                     button.setOnLongClickListener {
                         currentInputConnection?.finishComposingText()
                         composingWord.clear()
@@ -439,7 +452,20 @@ class NexInputMethodService : InputMethodService() {
         if (value != "ESPAÇO") lastSpacePressAt = 0L
         when (value) {
             "⇧" -> {
-                shifted = !shifted
+                val now = System.currentTimeMillis()
+                if (lastShiftTapAt > 0L && now - lastShiftTapAt in 1L..450L) {
+                    capsLocked = !capsLocked
+                    shifted = capsLocked
+                    lastShiftTapAt = 0L
+                } else {
+                    if (capsLocked) {
+                        capsLocked = false
+                        shifted = false
+                    } else {
+                        shifted = !shifted
+                    }
+                    lastShiftTapAt = now
+                }
                 showKeyboard()
             }
             "⌫" -> deleteBeforeCursor(connection)
@@ -508,7 +534,7 @@ class NexInputMethodService : InputMethodService() {
                         (beforeCursor.length >= 2 &&
                             beforeCursor[beforeCursor.lastIndex - 1] in ".!?" &&
                             beforeCursor.last() == ' '))
-                val output = if (shifted || shouldCapitalizeSentence) value.uppercase() else value
+                val output = if (shifted || capsLocked || shouldCapitalizeSentence) value.uppercase() else value
                 if (value.length == 1 && value[0].isLetter() && !isPrivateEditor()) {
                     composingWord.append(output)
                     connection.setComposingText(composingWord.toString(), 1)
@@ -521,7 +547,7 @@ class NexInputMethodService : InputMethodService() {
                     connection.commitText(output, 1)
                     renderSuggestionStrip()
                 }
-                if (shifted) {
+                if (shifted && !capsLocked) {
                     shifted = false
                     showKeyboard()
                 }
@@ -1055,7 +1081,7 @@ class NexInputMethodService : InputMethodService() {
 
     private fun displayKey(value: String): String = when (value) {
         "ESPAÇO" -> "Espaço"
-        else -> if (shifted && value.length == 1 && value[0].isLetter()) value.uppercase() else value
+        else -> if ((shifted || capsLocked) && value.length == 1 && value[0].isLetter()) value.uppercase() else value
     }
 
     private fun isSpecial(value: String) =
