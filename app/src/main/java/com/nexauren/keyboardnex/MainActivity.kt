@@ -107,9 +107,9 @@ class MainActivity : Activity() {
         content.addView(autoCard, marginParams(bottom = 10))
 
         addOption(
-            "Validade do histórico local",
+            "Validade do histórico interno",
             ttlLabel(),
-            "Os clips não fixados desaparecem após este prazo"
+            "Clips não fixados expiram; os fixados permanecem"
         ) { chooseTtl() }
 
         addOption(
@@ -129,7 +129,7 @@ class MainActivity : Activity() {
         addOption("Tema do teclado", prefs.getString("theme_name", "Neon Violet") ?: "Neon Violet", "Escolha uma aparência") {
             chooseTheme()
         }
-        addOption("Altura do teclado", prefs.getString("keyboard_height", "normal") ?: "normal", "Mais opções de tamanho serão adicionadas") {
+        addOption("Altura do teclado", heightLabel(), "Mais opções de tamanho serão adicionadas") {
             AlertDialog.Builder(this)
                 .setTitle("Altura do teclado")
                 .setItems(arrayOf("Compacta", "Padrão", "Alta")) { _, which ->
@@ -150,6 +150,12 @@ class MainActivity : Activity() {
 
         content.alpha = 0f
         content.animate().alpha(1f).setDuration(260).start()
+    }
+
+    private fun heightLabel(): String = when (prefs.getString("keyboard_height", "normal")) {
+        "compact" -> "Compacta"
+        "tall" -> "Alta"
+        else -> "Padrão"
     }
 
     private fun chooseTtl() {
