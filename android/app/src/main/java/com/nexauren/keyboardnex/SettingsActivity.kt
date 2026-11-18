@@ -64,6 +64,9 @@ class SettingsActivity : Activity() {
         ).apply { setPadding(dp(4), dp(2), dp(4), dp(18)) })
 
         section("DISPOSIÇÃO DO TECLADO")
+        option("Esquema do teclado", currentKeyboardLayout() + " · Alterar") {
+            chooseKeyboardLayout()
+        }
         switchOption(
             "Linha de números",
             "Mostrar 1–0 acima das letras. Pode ocupar um pouco mais de espaço.",
@@ -268,6 +271,28 @@ class SettingsActivity : Activity() {
             LinearLayout.LayoutParams.MATCH_PARENT,
             LinearLayout.LayoutParams.WRAP_CONTENT
         ).apply { bottomMargin = dp(7) })
+    }
+
+    private fun currentKeyboardLayout(): String =
+        when (prefs.getString("keyboard_layout", "qwerty")) {
+            "qwertz" -> "QWERTZ"
+            "azerty" -> "AZERTY"
+            else -> "QWERTY"
+        }
+
+    private fun chooseKeyboardLayout() {
+        val labels = arrayOf("QWERTY", "QWERTZ", "AZERTY")
+        val values = arrayOf("qwerty", "qwertz", "azerty")
+        val selected = values.indexOf(prefs.getString("keyboard_layout", "qwerty")).coerceAtLeast(0)
+        AlertDialog.Builder(this)
+            .setTitle("Esquema do teclado")
+            .setSingleChoiceItems(labels, selected) { dialog, which ->
+                prefs.edit().putString("keyboard_layout", values[which]).apply()
+                dialog.dismiss()
+                render()
+            }
+            .setNegativeButton("Cancelar", null)
+            .show()
     }
 
     private fun currentSuggestionLanguage(): String =
