@@ -132,6 +132,12 @@ class SettingsActivity : Activity() {
             "long_press_symbols_enabled",
             true
         )
+        switchOption(
+            "Deslizar na barra de espaço",
+            "Deslizar para a esquerda ou direita para mover o cursor no texto.",
+            "cursor_gesture_enabled",
+            true
+        )
         choiceOption(
             "Altura do teclado",
             "keyboard_height",
