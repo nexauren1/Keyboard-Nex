@@ -115,6 +115,7 @@ class NexInputMethodService : InputMethodService() {
             listenerRegistered = true
         }
         captureCurrentClipboard()
+        numberMode = false
         shifted = false
         capsLocked = false
         lastShiftTapAt = 0L
@@ -1000,6 +1001,13 @@ class NexInputMethodService : InputMethodService() {
 
     private fun moveCursor(keyCode: Int) {
         val connection = currentInputConnection ?: return
+        if (composingWord.isNotEmpty()) {
+            connection.finishComposingText()
+            composingWord.clear()
+            currentSuggestions = emptyList()
+            currentWordIsTypo = false
+            renderSuggestionStrip()
+        }
         connection.sendKeyEvent(KeyEvent(KeyEvent.ACTION_DOWN, keyCode))
         connection.sendKeyEvent(KeyEvent(KeyEvent.ACTION_UP, keyCode))
     }
