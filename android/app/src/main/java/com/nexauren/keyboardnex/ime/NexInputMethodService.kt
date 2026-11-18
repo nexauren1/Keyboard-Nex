@@ -14,6 +14,8 @@ import android.os.Handler
 import android.os.Looper
 import android.view.Gravity
 import android.view.KeyEvent
+import android.view.MotionEvent
+import kotlin.math.abs
 import android.view.HapticFeedbackConstants
 import android.view.View
 import android.view.inputmethod.EditorInfo
@@ -409,6 +411,36 @@ class NexInputMethodService : InputMethodService() {
                             .playSoundEffect(AudioManager.FX_KEYPRESS_STANDARD)
                     }
                     handleKey(value)
+                }
+                if (value == "ESPAÇO" && keyboardPrefs.getBoolean("cursor_gesture_enabled", true)) {
+                    var gestureConsumed = false
+                    var lastGestureX = 0f
+                    button.setOnTouchListener { view, event ->
+                        when (event.actionMasked) {
+                            MotionEvent.ACTION_DOWN -> {
+                                gestureConsumed = false
+                                lastGestureX = event.rawX
+                                false
+                            }
+                            MotionEvent.ACTION_MOVE -> {
+                                val delta = event.rawX - lastGestureX
+                                val stepSize = dp(18).toFloat()
+                                if (abs(delta) >= stepSize) {
+                                    val steps = (abs(delta) / stepSize).toInt().coerceAtMost(8)
+                                    val direction = if (delta < 0f) KeyEvent.KEYCODE_DPAD_LEFT else KeyEvent.KEYCODE_DPAD_RIGHT
+                                    repeat(steps) { moveCursor(direction) }
+                                    lastGestureX += (if (delta < 0f) -1f else 1f) * steps * stepSize
+                                    gestureConsumed = true
+                                    view.parent?.requestDisallowInterceptTouchEvent(true)
+                                    true
+                                } else {
+                                    gestureConsumed
+                                }
+                            }
+                            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> gestureConsumed
+                            else -> gestureConsumed
+                        }
+                    }
                 }
                 if (value == "⇧") {
                     button.setOnLongClickListener {
