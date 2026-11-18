@@ -99,6 +99,23 @@ class SettingsActivity : Activity() {
             true
         )
 
+        section("ESCRITA INTELIGENTE")
+        switchOption(
+            "Sugestões de palavras",
+            "Mostrar alternativas fornecidas pelo corretor ortográfico do Android.",
+            "suggestions_enabled",
+            true
+        )
+        switchOption(
+            "Autocorreção automática",
+            "Corrigir apenas quando o Android identificar um erro e sugerir uma alternativa.",
+            "auto_correct_enabled",
+            false
+        )
+        option("Idioma das sugestões", currentSuggestionLanguage() + " · Alterar") {
+            chooseSuggestionLanguage()
+        }
+
         section("DIGITAÇÃO")
         switchOption(
             "Ponto com duplo espaço",
@@ -251,6 +268,28 @@ class SettingsActivity : Activity() {
             LinearLayout.LayoutParams.MATCH_PARENT,
             LinearLayout.LayoutParams.WRAP_CONTENT
         ).apply { bottomMargin = dp(7) })
+    }
+
+    private fun currentSuggestionLanguage(): String =
+        when (prefs.getString("keyboard_language", "system")) {
+            "pt" -> "Português"
+            "en" -> "English"
+            else -> "Automático do dispositivo"
+        }
+
+    private fun chooseSuggestionLanguage() {
+        val labels = arrayOf("Automático do dispositivo", "Português", "English")
+        val values = arrayOf("system", "pt", "en")
+        val selected = values.indexOf(prefs.getString("keyboard_language", "system")).coerceAtLeast(0)
+        AlertDialog.Builder(this)
+            .setTitle("Idioma das sugestões")
+            .setSingleChoiceItems(labels, selected) { dialog, which ->
+                prefs.edit().putString("keyboard_language", values[which]).apply()
+                dialog.dismiss()
+                render()
+            }
+            .setNegativeButton("Cancelar", null)
+            .show()
     }
 
     private fun chooseTheme() {
