@@ -1,4 +1,4 @@
-name: Keyboard Nex Flutter Android build
+name: Keyboard Nex Android APK
 
 on:
   push:
@@ -39,17 +39,24 @@ jobs:
           printf "flutter.sdk=%s\n" "$FLUTTER_ROOT" > local.properties
           gradle wrapper --gradle-version 9.5.0
 
-      - name: Resolve Dart dependencies
+      - name: Resolve Flutter dependencies
         run: flutter pub get
 
       - name: Analyze Dart code
         run: flutter analyze
 
-      - name: Build debug APK
-        run: flutter build apk --debug
+      - name: Build one optimized APK for ARM32 + ARM64
+        run: |
+          flutter build apk --release \
+            --target-platform android-arm,android-arm64 \
+            --tree-shake-icons
+          echo "APK size:"
+          du -h build/app/outputs/flutter-apk/app-release.apk
 
-      - name: Upload debug APK
+      - name: Upload universal APK
         uses: actions/upload-artifact@v4
         with:
-          name: keyboard-nex-debug
-          path: build/app/outputs/flutter-apk/app-debug.apk
+          name: keyboard-nex-universal-arm-apk
+          path: build/app/outputs/flutter-apk/app-release.apk
+          if-no-files-found: error
+          retention-days: 7
