@@ -5,6 +5,7 @@ import android.content.ClipboardManager
 import android.content.Context
 import android.content.res.ColorStateList
 import android.graphics.Color
+import android.media.AudioManager
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.os.Build
@@ -202,6 +203,12 @@ class NexInputMethodService : InputMethodService() {
                     val hapticsEnabled = getSharedPreferences(ClipboardStore.SETTINGS, Context.MODE_PRIVATE)
                         .getBoolean("haptics_enabled", true)
                     if (hapticsEnabled) button.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
+                    val soundEnabled = getSharedPreferences(ClipboardStore.SETTINGS, Context.MODE_PRIVATE)
+                        .getBoolean("sound_enabled", false)
+                    if (soundEnabled) {
+                        (getSystemService(Context.AUDIO_SERVICE) as AudioManager)
+                            .playSoundEffect(AudioManager.FX_KEYPRESS_STANDARD)
+                    }
                     handleKey(value)
                 }
                 if (value == "⌫") {
