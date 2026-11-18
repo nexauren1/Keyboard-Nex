@@ -8,8 +8,6 @@ import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
 import android.view.Gravity
-import android.view.inputmethod.InputMethodManager
-import android.widget.EditText
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.Switch
@@ -146,24 +144,39 @@ class SettingsActivity : Activity() {
             }
         }
         box.addView(haptic)
-        val height = Switch(this).apply {
-            text = "Teclas mais altas"
+
+        val sound = Switch(this).apply {
+            text = "Som das teclas"
             setTextColor(Color.WHITE)
-            isChecked = prefs.getString("keyboard_height", "normal") == "tall"
+            isChecked = prefs.getBoolean("sound_enabled", false)
             setOnCheckedChangeListener { _, checked ->
-                prefs.edit().putString("keyboard_height", if (checked) "tall" else "normal").apply()
+                prefs.edit().putBoolean("sound_enabled", checked).apply()
             }
         }
-        box.addView(height)
-        val compact = Switch(this).apply {
-            text = "Teclado compacto"
+        box.addView(sound)
+
+        val currentHeight = prefs.getString("keyboard_height", "normal") ?: "normal"
+        val heightLabels = arrayOf("Compacta", "Padrão", "Alta")
+        val heightValues = arrayOf("compact", "normal", "tall")
+        val selected = heightValues.indexOf(currentHeight).coerceAtLeast(0)
+        val heightButton = TextView(this).apply {
+            text = "Altura das teclas: " + heightLabels[selected] + "  ›"
+            textSize = 14f
             setTextColor(Color.WHITE)
-            isChecked = prefs.getString("keyboard_height", "normal") == "compact"
-            setOnCheckedChangeListener { _, checked ->
-                prefs.edit().putString("keyboard_height", if (checked) "compact" else "normal").apply()
+            setPadding(0, dp(15), 0, dp(9))
+            setOnClickListener {
+                AlertDialog.Builder(this@SettingsActivity)
+                    .setTitle("Altura do teclado")
+                    .setSingleChoiceItems(heightLabels, selected) { dialog, which ->
+                        prefs.edit().putString("keyboard_height", heightValues[which]).apply()
+                        dialog.dismiss()
+                    }
+                    .setNegativeButton("Cancelar", null)
+                    .show()
             }
         }
-        box.addView(compact)
+        box.addView(heightButton)
+
         AlertDialog.Builder(this)
             .setTitle("Preferências")
             .setView(box)
@@ -184,33 +197,7 @@ class SettingsActivity : Activity() {
     }
 
     private fun openClipboardTest() {
-        val box = LinearLayout(this).apply {
-            orientation = LinearLayout.VERTICAL
-            setPadding(dp(18), dp(8), dp(18), dp(8))
-        }
-        box.addView(text("Toque no campo abaixo para abrir o teclado. Depois, escolha o ícone da área de transferência na barra superior.", 13, secondary))
-        val edit = EditText(this).apply {
-            hint = "Campo de teste do Keyboard Nex"
-            setTextColor(Color.WHITE)
-            setHintTextColor(secondary)
-            minLines = 2
-            gravity = Gravity.TOP
-            setPadding(dp(10), dp(10), dp(10), dp(10))
-            background = rounded(cardColor, 12)
-        }
-        box.addView(edit, LinearLayout.LayoutParams(
-            LinearLayout.LayoutParams.MATCH_PARENT, dp(88)
-        ).apply { topMargin = dp(12) })
-        AlertDialog.Builder(this)
-            .setTitle("Área de transferência")
-            .setView(box)
-            .setPositiveButton("Abrir teclado") { _, _ ->
-                edit.requestFocus()
-                val manager = getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
-                manager.showSoftInput(edit, InputMethodManager.SHOW_IMPLICIT)
-            }
-            .setNegativeButton("Fechar", null)
-            .show()
+        startActivity(android.content.Intent(this, MainActivity::class.java))
     }
 
     private fun currentTheme() =
