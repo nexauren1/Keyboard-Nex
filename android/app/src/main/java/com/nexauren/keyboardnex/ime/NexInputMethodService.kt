@@ -287,7 +287,7 @@ class NexInputMethodService : InputMethodService() {
                     ClipboardStore.SETTINGS, Context.MODE_PRIVATE
                 ).getBoolean("double_space_period_enabled", true)
                 if (doubleSpaceEnabled && !isPrivateEditor() &&
-                    previous == " " && now - lastSpacePressAt in 1..500
+                    previous == " " && now - lastSpacePressAt in 1L..500L
                 ) {
                     connection.deleteSurroundingText(1, 0)
                     connection.commitText(". ", 1)
@@ -311,9 +311,10 @@ class NexInputMethodService : InputMethodService() {
                 val beforeCursor = connection.getTextBeforeCursor(2, 0)?.toString().orEmpty()
                 val shouldCapitalizeSentence = value.length == 1 && value[0].isLetter() &&
                     sentenceCapsEnabled &&
-                    (beforeCursor.isEmpty() || beforeCursor.last() == '\\n' ||
-                        (beforeCursor.last() in ".!?" &&
-                            (beforeCursor.length == 1 || beforeCursor[beforeCursor.lastIndex - 1] == ' ')))
+                    (beforeCursor.isEmpty() || beforeCursor.last() == '\n' ||
+                        (beforeCursor.length >= 2 &&
+                            beforeCursor[beforeCursor.lastIndex - 1] in ".!?" &&
+                            beforeCursor.last() == ' '))
                 val output = if (shifted || shouldCapitalizeSentence) value.uppercase() else value
                 connection.commitText(output, 1)
                 if (shifted) {
