@@ -73,6 +73,9 @@ class MainActivity : Activity() {
             val manager = getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
             manager.showInputMethodPicker()
         })
+        hero.addView(actionButton("Abrir definições") {
+            startActivity(Intent(this, SettingsActivity::class.java))
+        })
         content.addView(hero, marginParams(top = 4, bottom = 20))
 
         section("TESTAR")
@@ -104,9 +107,9 @@ class MainActivity : Activity() {
         content.addView(autoCard, marginParams(bottom = 10))
 
         addOption(
-            "Tempo para apagar textos",
+            "Validade do histórico local",
             ttlLabel(),
-            "Escolher a duração do histórico não fixado"
+            "Os clips não fixados desaparecem após este prazo"
         ) { chooseTtl() }
 
         addOption(
@@ -126,7 +129,7 @@ class MainActivity : Activity() {
         addOption("Tema do teclado", prefs.getString("theme_name", "Neon Violet") ?: "Neon Violet", "Escolha uma aparência") {
             chooseTheme()
         }
-        addOption("Altura do teclado", "Padrão", "Mais opções de tamanho serão adicionadas") {
+        addOption("Altura do teclado", prefs.getString("keyboard_height", "normal") ?: "normal", "Mais opções de tamanho serão adicionadas") {
             AlertDialog.Builder(this)
                 .setTitle("Altura do teclado")
                 .setItems(arrayOf("Compacta", "Padrão", "Alta")) { _, which ->
