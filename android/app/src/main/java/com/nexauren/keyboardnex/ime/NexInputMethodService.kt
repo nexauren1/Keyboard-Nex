@@ -34,6 +34,11 @@ import android.widget.HorizontalScrollView
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
+import android.widget.Toast
+import android.text.Editable
+import android.text.TextWatcher
+import org.json.JSONArray
+import org.json.JSONObject
 import com.nexauren.keyboardnex.MainActivity
 import com.nexauren.keyboardnex.clipboard.ClipboardStore
 
@@ -776,132 +781,457 @@ class NexInputMethodService : InputMethodService() {
 
     private fun showEmojiPanel() {
         val host = root ?: return
+        val catalog = try {
+            EmojiCatalog.load(this)
+        } catch (_: Exception) {
+            emptyList()
+        }
         host.removeAllViews()
         val panel = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(dp(8), dp(5), dp(8), dp(5))
+            setPadding(dp(7), dp(4), dp(7), dp(5))
         }
+
         val header = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
         }
         header.addView(label("Emojis", 16, textColor, true),
-            LinearLayout.LayoutParams(0, dp(38), 1f))
+            LinearLayout.LayoutParams(0, dp(36), 1f))
+        header.addView(smallButton("+ Criar") { showCustomEmojiCreator() })
         header.addView(smallButton("Voltar") { showKeyboard() })
         panel.addView(header)
 
-        val categories = linkedMapOf(
-            "Sorrisos" to listOf(
-                "😀", "😃", "😄", "😁", "😆", "😅", "😂", "🤣",
-                "😊", "🙂", "🙃", "😉", "😍", "🥰", "😘", "😎",
-                "😭", "😢", "😡", "🤔", "🤗", "😴", "😇", "🤩"
-            ),
-            "Gestos" to listOf(
-                "👍", "👎", "👏", "🙏", "🤝", "💪", "👋", "👌",
-                "✌️", "🤞", "🤟", "🤘", "🫶", "👆", "👇", "☝️"
-            ),
-            "Corações" to listOf(
-                "❤️", "🧡", "💛", "💚", "💙", "💜", "🖤", "🤍",
-                "🤎", "💔", "💕", "💞", "💖", "💗", "💘", "💝"
-            ),
-            "Animais" to listOf(
-                "🐶", "🐱", "🐭", "🐹", "🐰", "🦊", "🐻", "🐼",
-                "🐨", "🐯", "🦁", "🐮", "🐸", "🐵", "🐧", "🐦"
-            ),
-            "Natureza" to listOf(
-                "🌍", "🌎", "🌏", "☀️", "🌤️", "🌧️", "⛈️", "❄️",
-                "🌙", "⭐", "🌈", "🌊", "🌸", "🌹", "🌻", "🌴"
-            ),
-            "Comida" to listOf(
-                "🍎", "🍌", "🍇", "🍉", "🍓", "🍍", "🥭", "🍔",
-                "🍕", "🍟", "🌮", "🍰", "🍫", "🍿", "☕", "🥤"
-            ),
-            "Símbolos" to listOf(
-                "🔥", "✨", "🎉", "✅", "❌", "⚡", "💯", "♻️",
-                "❤️‍🔥", "💤", "🔔", "⚠️", "❓", "❗", "➕", "➖"
-            ),
-            "Objetos" to listOf(
-                "🎧", "📱", "💡", "💻", "⌚", "📷", "🎮", "📚",
-                "✏️", "📌", "🔒", "🔑", "🚀", "🚗", "✈️", "🎵"
-            )
+        val search = EditText(this).apply {
+            hint = "Pesquisar em português ou inglês…"
+            setSingleLine(true)
+            textSize = 13f
+            setTextColor(textColor)
+            setHintTextColor(muted)
+            setPadding(dp(12), 0, dp(12), 0)
+            background = rounded(keyColor, 13)
+            imeOptions = EditorInfo.IME_ACTION_SEARCH
+            inputType = InputType.TYPE_CLASS_TEXT
+        }
+        panel.addView(search, LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT, dp(42)
+        ).apply { bottomMargin = dp(4) })
+
+        var activeCategory = "Recentes"
+        var visibleCount = 192
+        var showAllTones = false
+        val categoryNames = listOf(
+            "Recentes", "Favoritos", "NexaMoji", "Criados",
+            "Emojis e emoções", "Pessoas e corpo", "Animais e natureza",
+            "Comida e bebidas", "Viagens e lugares", "Atividades",
+            "Objetos", "Símbolos", "Bandeiras", "Tons de pele e cabelo"
         )
-        var activeCategory = "Sorrisos"
         val categoryScroller = HorizontalScrollView(this).apply {
             isHorizontalScrollBarEnabled = false
         }
-        val categoryRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        val categoryRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
         categoryScroller.addView(categoryRow)
         panel.addView(categoryScroller)
 
-        val scroller = ScrollView(this)
+        val status = label("${catalog.size} emojis · Unicode 18.0", 10, muted).apply {
+            setPadding(dp(4), dp(2), dp(4), dp(3))
+        }
+        panel.addView(status)
+
+        val contentScroller = ScrollView(this)
         val grid = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(0, dp(4), 0, dp(4))
+            setPadding(0, dp(2), 0, dp(4))
         }
-        scroller.addView(grid)
-        panel.addView(scroller, LinearLayout.LayoutParams(
+        contentScroller.addView(grid)
+        panel.addView(contentScroller, LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f
         ))
 
-        fun renderCategory() {
-            grid.removeAllViews()
-            val items = if (activeCategory == "Recentes") recentEmojis() else categories[activeCategory].orEmpty()
-            if (items.isEmpty()) {
-                grid.addView(label("Ainda não há emojis recentes. Escolhe um emoji para começar.", 13, muted).apply {
-                    gravity = Gravity.CENTER
-                    setPadding(dp(16), dp(28), dp(16), dp(28))
-                })
-                return
-            }
-            items.chunked(8).forEach { group ->
-                val row = LinearLayout(this).apply {
-                    orientation = LinearLayout.HORIZONTAL
-                    gravity = Gravity.CENTER
+        val customPack = listOf(
+            EmojiEntry("💜✨", "NexaMoji", "Identidade", "Nexauren glow", "Brilho Nexauren", "roxo marca brilho identidade"),
+            EmojiEntry("🚀💡", "NexaMoji", "Criatividade", "Idea launch", "Ideia em órbita", "criatividade ideia projeto inovação"),
+            EmojiEntry("🎧🔥", "NexaMoji", "Música", "Sound on fire", "Som no máximo", "audio música headphones"),
+            EmojiEntry("🧠⚡", "NexaMoji", "Criatividade", "Electric mind", "Mente elétrica", "inteligência foco"),
+            EmojiEntry("📚☕", "NexaMoji", "Estudo", "Study time", "Hora de estudar", "livros escola aprendizagem"),
+            EmojiEntry("🦋🌸", "NexaMoji", "Natureza", "Bloom", "Florescer", "borboleta flor primavera"),
+            EmojiEntry("🎯🏆", "NexaMoji", "Conquistas", "Goal achieved", "Objetivo alcançado", "sucesso vitória"),
+            EmojiEntry("🪘🎹🔥", "NexaMoji", "Música", "Amapiano vibe", "Vibe Amapiano", "amapiano música ritmo"),
+            EmojiEntry("🛠️💜", "NexaMoji", "Criação", "Made with care", "Feito com cuidado", "criar construir desenvolver"),
+            EmojiEntry("🌙✨", "NexaMoji", "Noite", "Night sparkle", "Noite brilhante", "lua estrelas"),
+            EmojiEntry("🌍🤝", "NexaMoji", "Pessoas", "One world", "Um só mundo", "mundo união amizade"),
+            EmojiEntry("🙏💛", "NexaMoji", "Gratidão", "Thankful", "Gratidão", "obrigado agradecimento"),
+            EmojiEntry("😊💫", "NexaMoji", "Alegria", "Good energy", "Boa energia", "feliz alegria"),
+            EmojiEntry("💻🚀", "NexaMoji", "Tecnologia", "Build and launch", "Criar e lançar", "tecnologia aplicativo"),
+            EmojiEntry("🎉🥳", "NexaMoji", "Festa", "Big celebration", "Grande celebração", "festa parabéns"),
+            EmojiEntry("🌧️💙", "NexaMoji", "Emoções", "Blue mood", "Dia azul", "triste saudade"),
+            EmojiEntry("❤️‍🔥🌹", "NexaMoji", "Amor", "Passion", "Paixão", "amor coração"),
+            EmojiEntry("💡🧩", "NexaMoji", "Ideias", "Piece by piece", "Peça por peça", "solução ideia"),
+            EmojiEntry("⚡🎮", "NexaMoji", "Diversão", "Power play", "Jogo poderoso", "gaming jogo"),
+            EmojiEntry("🌱🌳", "NexaMoji", "Natureza", "Growing", "A crescer", "crescer natureza")
+        )
+        val catalogByEmoji = catalog.associateBy { it.emoji }
+
+        fun customEntries(): List<EmojiEntry> {
+            val raw = getSharedPreferences(ClipboardStore.SETTINGS, Context.MODE_PRIVATE)
+                .getString("custom_emoji_entries", "[]").orEmpty()
+            return try {
+                val array = JSONArray(raw)
+                (0 until array.length()).mapNotNull { index ->
+                    val value = array.optJSONObject(index) ?: return@mapNotNull null
+                    val emoji = value.optString("emoji")
+                    val name = value.optString("name")
+                    if (emoji.isBlank() || name.isBlank()) null else EmojiEntry(
+                        emoji, "Criados", "Personalizados", name, name, "criado personalizado meu"
+                    )
                 }
-                group.forEach { emoji ->
-                    val button = keyButton(emoji, false).apply {
-                        textSize = 22f
-                        layoutParams = LinearLayout.LayoutParams(0, dp(47), 1f).apply {
-                            setMargins(dp(2), dp(2), dp(2), dp(2))
-                        }
-                        setOnClickListener {
-                            rememberEmoji(emoji)
-                            currentInputConnection?.commitText(emoji, 1)
-                            animatePress(this)
-                        }
-                    }
-                    row.addView(button)
-                }
-                grid.addView(row)
+            } catch (_: Exception) {
+                emptyList()
             }
         }
 
-        fun selectCategory(category: String) {
-            activeCategory = category
+        fun categoryItems(category: String): List<EmojiEntry> {
+            val entries = when (category) {
+                "Recentes" -> readStoredEmojiList("recent_emojis").mapNotNull {
+                    catalogByEmoji[it] ?: customPack.firstOrNull { item -> item.emoji == it }
+                        ?: customEntries().firstOrNull { item -> item.emoji == it }
+                }
+                "Favoritos" -> readStoredEmojiList("emoji_favorites").mapNotNull {
+                    catalogByEmoji[it] ?: customPack.firstOrNull { item -> item.emoji == it }
+                        ?: customEntries().firstOrNull { item -> item.emoji == it }
+                }
+                "NexaMoji" -> customPack
+                "Criados" -> customEntries()
+                else -> catalog.filter { it.group == category }
+            }
+            return if (showAllTones || category == "Tons de pele e cabelo") entries
+                else entries.filterNot { containsEmojiSkinTone(it.emoji) }
+        }
+
+        lateinit var renderGrid: () -> Unit
+        fun buildCategoryTabs() {
             categoryRow.removeAllViews()
-            (listOf("Recentes") + categories.keys).forEach { name ->
+            categoryNames.forEach { name ->
                 categoryRow.addView(smallButton(
-                    if (name == category) "• $name" else name
-                ) { selectCategory(name) })
+                    if (activeCategory == name) "• $name" else name
+                ) {
+                    activeCategory = name
+                    visibleCount = 192
+                    renderGrid()
+                    buildCategoryTabs()
+                })
             }
-            renderCategory()
         }
 
-        // The local emoji history is stored only on this device.
-        selectCategory(activeCategory)
+        renderGrid = {
+            grid.removeAllViews()
+            val query = search.text?.toString()?.trim()?.lowercase().orEmpty()
+            val results = if (query.isNotEmpty()) {
+                val all = catalog + customPack + customEntries()
+                val matches = all.filter { it.searchText.contains(query) || it.emoji.contains(query) }
+                if (showAllTones) matches else matches.filterNot { containsEmojiSkinTone(it.emoji) }
+            } else {
+                categoryItems(activeCategory)
+            }
+            status.text = if (query.isNotEmpty()) {
+                "${results.size} resultados para “$query”"
+            } else {
+                when (activeCategory) {
+                    "Recentes" -> "Emojis usados recentemente"
+                    "Favoritos" -> "Os teus emojis favoritos"
+                    "NexaMoji" -> "Combinações criadas pela Nexauren"
+                    "Criados" -> "As tuas combinações personalizadas"
+                    else -> "${results.size} emojis nesta categoria"
+                }
+            }
+            if (results.isEmpty()) {
+                grid.addView(label(
+                    when {
+                        query.isNotEmpty() -> "Não foram encontrados emojis. Experimenta outra palavra."
+                        activeCategory == "Recentes" -> "Ainda não usaste emojis. Começa por escolher um."
+                        activeCategory == "Favoritos" -> "Mantém um emoji premido para o guardar nos favoritos."
+                        activeCategory == "Criados" -> "Ainda não criaste combinações. Toca em + Criar."
+                        else -> "Esta categoria ainda não tem emojis disponíveis."
+                    }, 13, muted
+                ).apply {
+                    gravity = Gravity.CENTER
+                    setPadding(dp(18), dp(28), dp(18), dp(28))
+                })
+            } else {
+                val visible = results.take(visibleCount)
+                visible.chunked(8).forEach { group ->
+                    val row = LinearLayout(this).apply {
+                        orientation = LinearLayout.HORIZONTAL
+                        gravity = Gravity.CENTER
+                    }
+                    group.forEach { entry ->
+                        val button = keyButton(entry.emoji, false).apply {
+                            textSize = if (entry.emoji.length > 5) 20f else 23f
+                            contentDescription = entry.portugueseName
+                            layoutParams = LinearLayout.LayoutParams(0, dp(49), 1f).apply {
+                                setMargins(dp(2), dp(2), dp(2), dp(2))
+                            }
+                            setOnClickListener {
+                                rememberEmoji(entry.emoji)
+                                currentInputConnection?.commitText(entry.emoji, 1)
+                                animatePress(this)
+                            }
+                            setOnLongClickListener {
+                                showEmojiItemOptions(entry, catalog, customPack)
+                                true
+                            }
+                        }
+                        row.addView(button)
+                    }
+                    grid.addView(row)
+                }
+                if (results.size > visibleCount) {
+                    grid.addView(smallButton("Mostrar mais · ${results.size - visibleCount} restantes") {
+                        visibleCount = (visibleCount + 192).coerceAtMost(results.size)
+                        renderGrid()
+                    }.apply {
+                        layoutParams = LinearLayout.LayoutParams(
+                            LinearLayout.LayoutParams.MATCH_PARENT, dp(38)
+                        ).apply { topMargin = dp(5) }
+                    })
+                }
+            }
+        }
+
+        search.addTextChangedListener(object : TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
+                visibleCount = 192
+                renderGrid()
+            }
+            override fun afterTextChanged(s: Editable?) = Unit
+        })
+
+        val tools = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        tools.addView(smallButton("Mostrar todos os tons") {
+            showAllTones = !showAllTones
+            status.text = if (showAllTones) "A mostrar também as variações de tons de pele" else "A mostrar as versões base dos emojis"
+            visibleCount = 192
+            renderGrid()
+        })
+        tools.addView(label("Mantém premido para tons ou favoritos", 10, muted).apply {
+            setPadding(dp(5), 0, 0, 0)
+        }, LinearLayout.LayoutParams(0, dp(34), 1f))
+        panel.addView(tools)
+
+        buildCategoryTabs()
+        renderGrid()
         host.addView(panel)
     }
 
-    private fun recentEmojis(): List<String> {
-        val stored = getSharedPreferences(ClipboardStore.SETTINGS, Context.MODE_PRIVATE)
-            .getString("recent_emojis", "").orEmpty()
-        return stored.split("|").filter { it.isNotBlank() }.take(24)
+    private fun containsEmojiSkinTone(value: String): Boolean {
+        var index = 0
+        while (index < value.length) {
+            val codePoint = Character.codePointAt(value, index)
+            if (codePoint in 0x1F3FB..0x1F3FF) return true
+            index += Character.charCount(codePoint)
+        }
+        return false
     }
 
     private fun rememberEmoji(emoji: String) {
-        val recent = (listOf(emoji) + recentEmojis().filterNot { it == emoji }).take(24)
+        val recent = readStoredEmojiList("recent_emojis")
+        val updated = (listOf(emoji) + recent.filterNot { it == emoji }).take(40)
+        saveStoredEmojiList("recent_emojis", updated)
+    }
+
+    private fun toggleEmojiFavorite(emoji: String) {
+        val favourites = readStoredEmojiList("emoji_favorites").toMutableList()
+        if (emoji in favourites) favourites.remove(emoji) else favourites.add(0, emoji)
+        saveStoredEmojiList("emoji_favorites", favourites)
+    }
+
+    private fun readStoredEmojiList(key: String): List<String> {
+        val raw = getSharedPreferences(ClipboardStore.SETTINGS, Context.MODE_PRIVATE)
+            .getString(key, "[]").orEmpty()
+        return try {
+            val array = JSONArray(raw)
+            (0 until array.length()).mapNotNull { array.optString(it).takeIf { value -> value.isNotBlank() } }
+        } catch (_: Exception) {
+            raw.split("|").filter { it.isNotBlank() }
+        }
+    }
+
+    private fun saveStoredEmojiList(key: String, values: List<String>) {
+        val array = JSONArray()
+        values.distinct().forEach { array.put(it) }
         getSharedPreferences(ClipboardStore.SETTINGS, Context.MODE_PRIVATE)
-            .edit().putString("recent_emojis", recent.joinToString("|")).apply()
+            .edit().putString(key, array.toString()).apply()
+    }
+
+    private fun showEmojiItemOptions(entry: EmojiEntry, catalog: List<EmojiEntry>, customPack: List<EmojiEntry>) {
+        val options = mutableListOf<String>()
+        val actions = mutableListOf<() -> Unit>()
+        options.add("Inserir ${entry.emoji}")
+        actions.add {
+            rememberEmoji(entry.emoji)
+            currentInputConnection?.commitText(entry.emoji, 1)
+        }
+
+        val favourite = entry.emoji in readStoredEmojiList("emoji_favorites")
+        options.add(if (favourite) "Remover dos favoritos" else "Adicionar aos favoritos")
+        actions.add {
+            toggleEmojiFavorite(entry.emoji)
+            Toast.makeText(
+                this,
+                if (favourite) "Removido dos favoritos" else "Adicionado aos favoritos",
+                Toast.LENGTH_SHORT
+            ).show()
+        }
+
+        val toneVariants = catalog.filter {
+            it.toneBase == entry.toneBase && containsEmojiSkinTone(it.emoji)
+        }.distinctBy { it.emoji }.take(30)
+        if (toneVariants.isNotEmpty()) {
+            options.add("Escolher tom de pele (${toneVariants.size} opções)")
+            actions.add {
+                val labels = toneVariants.map { "${it.emoji}  ${it.portugueseName}" }.toTypedArray()
+                AlertDialog.Builder(this)
+                    .setTitle("Escolher tom de pele")
+                    .setItems(labels) { _, which ->
+                        val emoji = toneVariants[which].emoji
+                        rememberEmoji(emoji)
+                        currentInputConnection?.commitText(emoji, 1)
+                    }
+                    .setNegativeButton("Cancelar", null)
+                    .show()
+            }
+        }
+        if (entry.group == "Criados") {
+            options.add("Eliminar combinação")
+            actions.add {
+                deleteCustomEmoji(entry.emoji, entry.portugueseName)
+                showEmojiPanel()
+            }
+        }
+        AlertDialog.Builder(this)
+            .setTitle(entry.portugueseName)
+            .setItems(options.toTypedArray()) { _, which -> actions[which]() }
+            .setNegativeButton("Fechar", null)
+            .show()
+    }
+
+    private fun deleteCustomEmoji(emoji: String, name: String) {
+        val prefs = getSharedPreferences(ClipboardStore.SETTINGS, Context.MODE_PRIVATE)
+        val raw = prefs.getString("custom_emoji_entries", "[]").orEmpty()
+        val array = try { JSONArray(raw) } catch (_: Exception) { JSONArray() }
+        val kept = JSONArray()
+        for (index in 0 until array.length()) {
+            val item = array.optJSONObject(index) ?: continue
+            if (item.optString("emoji") != emoji || item.optString("name") != name) kept.put(item)
+        }
+        prefs.edit().putString("custom_emoji_entries", kept.toString()).apply()
+    }
+
+    private fun showCustomEmojiCreator() {
+        val content = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(14), dp(8), dp(14), dp(8))
+        }
+        val nameInput = EditText(this).apply {
+            hint = "Nome da combinação"
+            setSingleLine(true)
+            textSize = 14f
+            setTextColor(textColor)
+            setHintTextColor(muted)
+        }
+        content.addView(nameInput)
+        val sequence = StringBuilder()
+        val preview = TextView(this).apply {
+            text = "Escolhe os emojis abaixo"
+            textSize = 25f
+            setTextColor(textColor)
+            gravity = Gravity.CENTER
+            setPadding(0, dp(8), 0, dp(8))
+        }
+        content.addView(preview)
+        val quickEmojis = listOf(
+            "😀","😂","🥰","😍","😎","🥳","😭","🤔",
+            "👋","👍","👏","🙏","🤝","💪","❤️","💜",
+            "💙","💛","🔥","✨","⭐","🌸","🦋","🌍",
+            "🎧","🎵","🎹","📚","💡","🚀","🏆","🎉",
+            "🌙","☀️","🍀","🌈","💻","🪘","🎮","☕"
+        )
+        val scroll = ScrollView(this)
+        val grid = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        quickEmojis.chunked(8).forEach { group ->
+            val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+            group.forEach { emoji ->
+                val button = keyButton(emoji, false).apply {
+                    textSize = 21f
+                    layoutParams = LinearLayout.LayoutParams(0, dp(42), 1f).apply {
+                        setMargins(dp(2), dp(2), dp(2), dp(2))
+                    }
+                    setOnClickListener {
+                        if (sequence.length < 40) sequence.append(emoji)
+                        preview.text = sequence.toString().ifEmpty { "Escolhe os emojis abaixo" }
+                    }
+                }
+                row.addView(button)
+            }
+            grid.addView(row)
+        }
+        scroll.addView(grid)
+        content.addView(scroll, LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT, dp(250)
+        ))
+        val controls = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        controls.addView(smallButton("Apagar último") {
+            if (sequence.isNotEmpty()) {
+                val last = Character.offsetByCodePoints(sequence, sequence.length, -1)
+                sequence.delete(last, sequence.length)
+                preview.text = sequence.toString().ifEmpty { "Escolhe os emojis abaixo" }
+            }
+        })
+        controls.addView(smallButton("Limpar") {
+            sequence.clear()
+            preview.text = "Escolhe os emojis abaixo"
+        })
+        content.addView(controls)
+        val dialog = AlertDialog.Builder(this)
+            .setTitle("Criar NexaMoji")
+            .setView(content)
+            .setNegativeButton("Cancelar", null)
+            .setPositiveButton("Guardar", null)
+            .create()
+        dialog.setOnShowListener {
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                val name = nameInput.text.toString().trim()
+                val emoji = sequence.toString()
+                if (name.isBlank() || emoji.isBlank()) {
+                    Toast.makeText(this, "Escolhe um nome e pelo menos um emoji.", Toast.LENGTH_SHORT).show()
+                } else {
+                    val prefs = getSharedPreferences(ClipboardStore.SETTINGS, Context.MODE_PRIVATE)
+                    val current = try {
+                        JSONArray(prefs.getString("custom_emoji_entries", "[]").orEmpty())
+                    } catch (_: Exception) {
+                        JSONArray()
+                    }
+                    val updated = JSONArray()
+                    for (index in 0 until current.length()) {
+                        val item = current.optJSONObject(index) ?: continue
+                        if (item.optString("name") != name) updated.put(item)
+                    }
+                    updated.put(JSONObject().put("name", name).put("emoji", emoji))
+                    prefs.edit().putString("custom_emoji_entries", updated.toString()).apply()
+                    dialog.dismiss()
+                    Toast.makeText(this, "NexaMoji guardado.", Toast.LENGTH_SHORT).show()
+                    showEmojiPanel()
+                }
+            }
+        }
+        dialog.show()
     }
 
     private fun showToolsPanel() {
