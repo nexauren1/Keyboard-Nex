@@ -13,6 +13,7 @@ import android.view.HapticFeedbackConstants
 import android.view.View
 import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputConnection
+import android.text.InputType
 import android.inputmethodservice.InputMethodService
 import android.widget.CheckBox
 import android.widget.EditText
@@ -74,7 +75,24 @@ class NexInputMethodService : InputMethodService() {
         super.onDestroy()
     }
 
+    private fun isPrivateEditor(): Boolean {
+        val info = currentInputEditorInfo ?: return false
+        val inputClass = info.inputType and InputType.TYPE_MASK_CLASS
+        val variation = info.inputType and InputType.TYPE_MASK_VARIATION
+        val passwordField =
+            (inputClass == InputType.TYPE_CLASS_TEXT && variation in setOf(
+                InputType.TYPE_TEXT_VARIATION_PASSWORD,
+                InputType.TYPE_TEXT_VARIATION_WEB_PASSWORD,
+                InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD
+            )) ||
+            (inputClass == InputType.TYPE_CLASS_NUMBER &&
+                variation == InputType.TYPE_NUMBER_VARIATION_PASSWORD)
+        val noLearning = info.imeOptions and EditorInfo.IME_FLAG_NO_PERSONALIZED_LEARNING != 0
+        return passwordField || noLearning
+    }
+
     private fun captureCurrentClipboard() {
+        if (isPrivateEditor()) return
         if (!ClipboardStore.isAutoCaptureEnabled(this)) return
         try {
             if (!clipboardManager.hasPrimaryClip()) return
@@ -85,6 +103,7 @@ class NexInputMethodService : InputMethodService() {
                 if (sensitive) return
             }
             val text = clip.getItemAt(0).coerceToText(this)?.toString() ?: return
+            if (text.length > 5000) return
             ClipboardStore.capture(this, text)
         } catch (_: SecurityException) {
             // Clipboard access can be restricted by Android version or device policy.
@@ -107,6 +126,8 @@ class NexInputMethodService : InputMethodService() {
 
     private fun showKeyboard() {
         val host = root ?: return
+        host.animate().cancel()
+        host.alpha = 0f
         host.removeAllViews()
         host.background = GradientDrawable(
             GradientDrawable.Orientation.TOP_BOTTOM,
@@ -132,7 +153,7 @@ class NexInputMethodService : InputMethodService() {
             setPadding(dp(5), 0, dp(5), 0)
         }
         suggestions.addView(label("Keyboard Nex", 12, muted, true), LinearLayout.LayoutParams(0, dp(28), 1f))
-        suggestions.addView(label("PT  ·  EN", 11, muted), LinearLayout.LayoutParams(
+        suggestions.addView(label("QWERTY", 11, muted), LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.WRAP_CONTENT, dp(28)
         ))
         host.addView(suggestions)
@@ -191,6 +212,7 @@ class NexInputMethodService : InputMethodService() {
             }
             host.addView(row)
         }
+        host.animate().alpha(1f).setDuration(150).start()
     }
 
     private fun handleKey(value: String) {
@@ -223,7 +245,10 @@ class NexInputMethodService : InputMethodService() {
             else -> {
                 val output = if (shifted) value.uppercase() else value
                 connection.commitText(output, 1)
-                shifted = false
+                if (shifted) {
+                    shifted = false
+                    showKeyboard()
+                }
             }
         }
     }
@@ -242,7 +267,6 @@ class NexInputMethodService : InputMethodService() {
 
     private fun showClipboardPanel() {
         val host = root ?: return
-        host.removeAllViews()
         val panel = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(8), dp(4), dp(8), dp(5))
@@ -354,9 +378,7 @@ class NexInputMethodService : InputMethodService() {
         panel.addView(label("Os itens não fixados são apagados após o tempo definido nas definições.", 10, muted).apply {
             setPadding(dp(3), dp(4), dp(3), dp(2))
         })
-        host.addView(panel, LinearLayout.LayoutParams(
-            LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.MATCH_PARENT
-        ))
+        transitionPanel(panel)
     }
 
     private fun showEditPanel(id: String, original: String) {
@@ -388,7 +410,7 @@ class NexInputMethodService : InputMethodService() {
             showClipboardPanel()
         })
         panel.addView(buttons)
-        host.addView(panel)
+        transitionPanel(panel)
     }
 
     private fun showEmojiPanel() {
@@ -481,6 +503,24 @@ class NexInputMethodService : InputMethodService() {
         host.addView(panel)
     }
 
+
+    private fun transitionPanel(panel: View) {
+        val host = root ?: return
+        host.animate().cancel()
+        host.animate().alpha(0f).setDuration(85).withEndAction {
+            host.removeAllViews()
+            host.addView(
+                panel,
+                LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    LinearLayout.LayoutParams.MATCH_PARENT
+                )
+            )
+            host.alpha = 0f
+            host.animate().alpha(1f).setDuration(165).start()
+        }.start()
+    }
+
     private fun openSettings() {
         val intent = android.content.Intent(this, MainActivity::class.java)
             .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
@@ -547,7 +587,7 @@ class NexInputMethodService : InputMethodService() {
         }
 
     private fun displayKey(value: String): String = when (value) {
-        "ESPAÇO" -> "Português"
+        "ESPAÇO" -> "Espaço"
         else -> if (shifted && value.length == 1 && value[0].isLetter()) value.uppercase() else value
     }
 
