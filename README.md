@@ -2,24 +2,26 @@
 
 **Nexauren — Building Digital Products**
 
-Keyboard Nex is a Flutter-first Android keyboard with a native Android Input Method Service (IME).
+Keyboard Nex is an Android keyboard with a Flutter companion interface and a native Android Input Method Service (IME).
 
 ## Technology
 
-- Flutter and Dart: companion app, home dashboard, theme gallery, clipboard manager and preferences.
-- Kotlin: Android Input Method Service, text-input connection and system integration.
+- Flutter Material SDK: companion dashboard, themes, clipboard manager and preferences.
+- Kotlin: Android keyboard service, text input and system integration.
 - Local storage: Android SharedPreferences for keyboard settings and clipboard history.
-- Platform channel: a small method-channel bridge connects Flutter screens to the native keyboard data and actions.
+- Platform channel: connects the companion interface to the native keyboard.
+
+The project intentionally uses Flutter's built-in Material widgets and has no additional Dart runtime packages.
 
 ## Current foundation
 
 - Native Android QWERTY keyboard with letters, numbers, symbols, shift, delete and enter.
-- Flutter home dashboard with Android keyboard setup shortcuts.
-- Theme gallery with four built-in themes: Neon Violet, Midnight Blue, Ocean Cyan and Minimal Light.
+- Companion dashboard with Android keyboard setup shortcuts.
+- Four built-in themes: Neon Violet, Midnight Blue, Ocean Cyan and Minimal Light.
 - Clipboard manager with search, filters, multi-selection, batch pin/unpin, edit, delete and clear-all.
 - Configurable retention for unpinned clipboard entries: 5 minutes, 15 minutes, 30 minutes, 1 hour, 24 hours or 7 days.
 - Pinned clips do not expire automatically.
-- Keyboard preferences for automatic clipboard capture, vibration, key sounds and keyboard height.
+- Preferences for automatic clipboard capture, vibration, key sounds and keyboard height.
 - Local-first storage; no account or cloud sync is required.
 
 ## Privacy and clipboard behaviour
@@ -30,31 +32,27 @@ The configured retention period applies to Keyboard Nex's internal history. Pinn
 
 ## Photo themes
 
-The first build includes four built-in themes. Photo-theme packs and downloads are planned for a later stage. Image packs must be licensed for the intended use and hosted by Nexauren; unmodified stock images should not be redistributed as standalone downloads. Review the current Pixabay licence and API conditions before adding assets.
+The current build includes four built-in themes. Downloadable photo-theme packs are not included in this version.
 
-- Pixabay Content License: https://pixabay.com/service/license-summary/
-- Pixabay Terms: https://pixabay.com/service/terms/
-- Pixabay API documentation: https://pixabay.com/api/docs/
+## Optimized APK
 
-## Build
+The Android workflow creates one universal APK containing both:
+- armeabi-v7a (ARM 32-bit)
+- arm64-v8a (ARM 64-bit)
 
-Requirements:
-- Flutter 3.50.0 stable
-- Dart 3.14 (bundled with Flutter)
-- JDK 17
-- Android SDK provided by Flutter tooling
+It does not generate an AAB or separate ABI APK files. Release code and Android resources are minified/shrunk, and unused Material icons are tree-shaken.
 
-From the repository root, run:
+Build locally:
 
     flutter pub get
     flutter analyze
-    flutter build apk --debug
+    flutter build apk --release --target-platform android-arm,android-arm64 --tree-shake-icons
 
-The debug APK is generated at:
+Output:
 
-    build/app/outputs/flutter-apk/app-debug.apk
+    build/app/outputs/flutter-apk/app-release.apk
 
-The GitHub Actions workflow builds and uploads the debug APK artifact on pushes and pull requests to main.
+The CI build uses a temporary debug signing key for installation/testing. Replace it with Nexauren's private release signing key before publishing to an app store.
 
 ## Package and version
 
@@ -62,5 +60,3 @@ The GitHub Actions workflow builds and uploads the debug APK artifact on pushes 
 - Version name: 0.0.1
 - Version code: 1
 - Platform: Android
-- Main application UI: Flutter / Dart
-- Input method service: Kotlin / Android
