@@ -27,7 +27,10 @@ The keyboard does not bundle a large dictionary, download language packs or send
 - Word suggestions and spelling alternatives from the Android system spell checker.
 - Optional autocorrection, disabled by default.
 - Suggestion language preference: device default, Portuguese or English. Actual availability depends on the spell checker and dictionaries installed on Android.
-- Emoji categories and locally stored recent emojis.
+- Complete Unicode Emoji 18.0 catalogue: 3,972 fully-qualified emoji and components, grouped by the official categories.
+- Emoji search with Portuguese CLDR names and keywords, plus English names.
+- Recent emojis, local favourites and skin-tone variants, including long-press tone selection.
+- NexaMoji: original Nexauren emoji combinations and a local creator for user-made emoji combinations.
 - Four built-in themes: Neon Violet, Midnight Blue, Ocean Cyan and Minimal Light.
 
 ## Companion app and clipboard
@@ -48,6 +51,10 @@ Spell suggestions use the Android spell-checking service configured on the devic
 ## Photo themes
 
 The current build includes four built-in themes. Downloadable photo-theme packs are not included in this version.
+
+## Emoji data and rendering
+
+The bundled catalogue is based on Unicode Emoji 18.0 and Portuguese CLDR annotations. It includes Unicode emoji characters and sequences, such as flags, families, professions and skin-tone variations. Search and selection work offline. The actual emoji artwork is drawn by the Android system font; older Android versions may show a placeholder for characters introduced after their emoji font was released. See THIRD_PARTY_NOTICES.md for data attribution and licensing.
 
 ## Optimized APK
 
