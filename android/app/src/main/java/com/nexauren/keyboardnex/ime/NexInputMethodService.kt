@@ -1134,6 +1134,91 @@ class NexInputMethodService : InputMethodService() {
         prefs.edit().putString("custom_emoji_entries", kept.toString()).apply()
     }
 
+    private fun showEmojiCatalogSelector(onSelected: (String) -> Unit) {
+        val catalog = try { EmojiCatalog.load(this) } catch (_: Exception) { emptyList() }
+        val content = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(10), dp(7), dp(10), dp(7))
+        }
+        val search = EditText(this).apply {
+            hint = "Pesquisar todos os emojis…"
+            setSingleLine(true)
+            textSize = 13f
+            setTextColor(textColor)
+            setHintTextColor(muted)
+            setPadding(dp(10), 0, dp(10), 0)
+            background = rounded(keyColor, 12)
+            imeOptions = EditorInfo.IME_ACTION_SEARCH
+            inputType = InputType.TYPE_CLASS_TEXT
+        }
+        content.addView(search, LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT, dp(42)
+        ))
+        val status = label("${catalog.size} emojis disponíveis", 10, muted).apply {
+            setPadding(dp(3), dp(3), dp(3), dp(3))
+        }
+        content.addView(status)
+        val scroll = ScrollView(this)
+        val grid = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        scroll.addView(grid)
+        content.addView(scroll, LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT, dp(330)
+        ))
+        var visibleCount = 160
+        lateinit var render: () -> Unit
+        render = {
+            grid.removeAllViews()
+            val query = search.text?.toString()?.trim()?.lowercase().orEmpty()
+            val results = if (query.isBlank()) catalog else catalog.filter {
+                it.searchText.contains(query) || it.emoji.contains(query)
+            }
+            status.text = if (query.isBlank()) {
+                "${results.size} emojis · escolhe um para adicionar"
+            } else {
+                "${results.size} resultados"
+            }
+            results.take(visibleCount).chunked(8).forEach { group ->
+                val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+                group.forEach { entry ->
+                    val button = keyButton(entry.emoji, false).apply {
+                        textSize = 22f
+                        contentDescription = entry.portugueseName
+                        layoutParams = LinearLayout.LayoutParams(0, dp(44), 1f).apply {
+                            setMargins(dp(2), dp(2), dp(2), dp(2))
+                        }
+                        setOnClickListener {
+                            onSelected(entry.emoji)
+                            dialog.dismiss()
+                        }
+                    }
+                    row.addView(button)
+                }
+                grid.addView(row)
+            }
+            if (results.size > visibleCount) {
+                grid.addView(smallButton("Mostrar mais") {
+                    visibleCount = (visibleCount + 160).coerceAtMost(results.size)
+                    render()
+                })
+            }
+        }
+        val dialog = AlertDialog.Builder(this)
+            .setTitle("Escolher do catálogo completo")
+            .setView(content)
+            .setNegativeButton("Fechar", null)
+            .create()
+        search.addTextChangedListener(object : TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) = Unit
+            override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {
+                visibleCount = 160
+                render()
+            }
+            override fun afterTextChanged(s: Editable?) = Unit
+        })
+        render()
+        dialog.show()
+    }
+
     private fun showCustomEmojiCreator() {
         val content = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
@@ -1196,6 +1281,12 @@ class NexInputMethodService : InputMethodService() {
         controls.addView(smallButton("Limpar") {
             selectedEmojis.clear()
             preview.text = "Escolhe os emojis abaixo"
+        })
+        controls.addView(smallButton("Catálogo completo") {
+            showEmojiCatalogSelector { emoji ->
+                if (selectedEmojis.joinToString("").length < 40) selectedEmojis.add(emoji)
+                preview.text = selectedEmojis.joinToString("").ifEmpty { "Escolhe os emojis abaixo" }
+            }
         })
         content.addView(controls)
         val dialog = AlertDialog.Builder(this)
