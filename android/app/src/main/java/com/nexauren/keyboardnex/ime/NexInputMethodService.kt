@@ -10,6 +10,8 @@ import android.media.AudioManager
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import android.view.Gravity
 import android.view.KeyEvent
 import android.view.HapticFeedbackConstants
@@ -82,7 +84,7 @@ class NexInputMethodService : InputMethodService() {
                 suggestionInfo.getSuggestionsAttributes() and
                 SuggestionsInfo.RESULT_ATTR_LOOKS_LIKE_TYPO != 0
 
-            runOnUiThread {
+            Handler(Looper.getMainLooper()).post {
                 if (composingWord.isEmpty() || isPrivateEditor()) return@runOnUiThread
                 currentSuggestions = suggestions
                 currentWordIsTypo = isTypo
