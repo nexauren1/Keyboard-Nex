@@ -32,6 +32,7 @@ class NexInputMethodService : InputMethodService() {
     private val muted: Int get() = if (themeName() == "Minimal Light") Color.rgb(91, 99, 124) else Color.rgb(169, 176, 204)
     private var shifted = false
     private var numberMode = false
+    private var lastSpacePressAt = 0L
     private var root: LinearLayout? = null
     private val selectedClipIds = linkedSetOf<String>()
     private lateinit var clipboardManager: ClipboardManager
@@ -149,31 +150,43 @@ class NexInputMethodService : InputMethodService() {
             LinearLayout.LayoutParams.MATCH_PARENT, dp(42)
         ))
 
-        val suggestions = LinearLayout(this).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
-            setPadding(dp(5), 0, dp(5), 0)
+        // Remove the static brand row so more screen space is available for keys.
+        val keyboardPrefs = getSharedPreferences(ClipboardStore.SETTINGS, Context.MODE_PRIVATE)
+        val showEmojiKey = keyboardPrefs.getBoolean("emoji_key_enabled", true)
+        val showLanguageKey = keyboardPrefs.getBoolean("language_switch_key_enabled", false)
+        val showCommaKey = keyboardPrefs.getBoolean("comma_key_enabled", true)
+        val showPeriodKey = keyboardPrefs.getBoolean("period_key_enabled", true)
+        val bottomUtilityKey = when {
+            showEmojiKey -> "☺"
+            showLanguageKey -> "🌐"
+            else -> null
         }
-        suggestions.addView(label("Keyboard Nex", 12, muted, true), LinearLayout.LayoutParams(0, dp(28), 1f))
-        suggestions.addView(label("QWERTY", 11, muted), LinearLayout.LayoutParams(
-            LinearLayout.LayoutParams.WRAP_CONTENT, dp(28)
-        ))
-        host.addView(suggestions)
+        val bottomRow = listOfNotNull(
+            if (numberMode) "ABC" else "?123",
+            bottomUtilityKey,
+            if (showCommaKey) "," else null,
+            "ESPAÇO",
+            if (showPeriodKey) "." else null,
+            "↵"
+        )
 
         val rows = if (numberMode) {
-            listOf(
+            mutableListOf(
                 listOf("1", "2", "3", "4", "5", "6", "7", "8", "9", "0"),
                 listOf("@", "#", "$", "%", "&", "-", "+", "(", ")", "/"),
-                listOf("=", "*", "\"", "'", ":", ";", "!", "?", "⌫"),
-                listOf("ABC", "☺", ",", "ESPAÇO", ".", "↵")
+                listOf("=", "*", "\\\"", "'", ":", ";", "!", "?", "⌫"),
+                bottomRow
             )
         } else {
-            listOf(
+            mutableListOf(
                 listOf("q", "w", "e", "r", "t", "y", "u", "i", "o", "p"),
                 listOf("a", "s", "d", "f", "g", "h", "j", "k", "l"),
                 listOf("⇧", "z", "x", "c", "v", "b", "n", "m", "⌫"),
-                listOf("?123", "☺", ",", "ESPAÇO", ".", "↵")
+                bottomRow
             )
+        }
+        if (!numberMode && keyboardPrefs.getBoolean("number_row_enabled", true)) {
+            rows.add(0, listOf("1", "2", "3", "4", "5", "6", "7", "8", "9", "0"))
         }
 
         rows.forEachIndexed { index, values ->
@@ -182,17 +195,25 @@ class NexInputMethodService : InputMethodService() {
                 gravity = Gravity.CENTER
             }
             val height = when (prefsHeight()) {
-                "compact" -> 42
-                "tall" -> 55
-                else -> 48
+                "compact" -> 40
+                "tall" -> 53
+                else -> 46
             }
-            val rowHeight = if (index == 3) height + 3 else height
+            val isNumberRow = !numberMode &&
+                keyboardPrefs.getBoolean("number_row_enabled", true) && index == 0
+            val rowHeight = when {
+                isNumberRow -> (height - 9).coerceAtLeast(30)
+                index == rows.lastIndex -> height + 2
+                else -> height
+            }
             values.forEach { value ->
                 val weight = when (value) {
                     "ESPAÇO" -> 3.1f
                     "?123", "ABC" -> 1.4f
                     "⇧", "⌫" -> 1.35f
                     "↵" -> 1.45f
+                    "🌐" -> 1.05f
+                    "," , "." -> 0.78f
                     else -> 1f
                 }
                 val button = keyButton(displayKey(value), isSpecial(value))
@@ -217,6 +238,17 @@ class NexInputMethodService : InputMethodService() {
                         currentInputConnection?.deleteSurroundingText(30, 0)
                         true
                     }
+                } else if (keyboardPrefs.getBoolean("long_press_symbols_enabled", true)) {
+                    val number = mapOf(
+                        "q" to "1", "w" to "2", "e" to "3", "r" to "4", "t" to "5",
+                        "y" to "6", "u" to "7", "i" to "8", "o" to "9", "p" to "0"
+                    )[value.lowercase()]
+                    if (number != null) {
+                        button.setOnLongClickListener {
+                            currentInputConnection?.commitText(number, 1)
+                            true
+                        }
+                    }
                 }
                 row.addView(button)
             }
@@ -227,6 +259,7 @@ class NexInputMethodService : InputMethodService() {
 
     private fun handleKey(value: String) {
         val connection = currentInputConnection ?: return
+        if (value != "ESPAÇO") lastSpacePressAt = 0L
         when (value) {
             "⇧" -> {
                 shifted = !shifted
@@ -242,8 +275,27 @@ class NexInputMethodService : InputMethodService() {
                 showKeyboard()
             }
             "☺" -> showEmojiPanel()
+            "🌐" -> {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN) {
+                    switchToNextInputMethod(false)
+                }
+            }
             "ESPAÇO" -> {
-                connection.commitText(" ", 1)
+                val now = System.currentTimeMillis()
+                val previous = connection.getTextBeforeCursor(1, 0)?.toString().orEmpty()
+                val doubleSpaceEnabled = getSharedPreferences(
+                    ClipboardStore.SETTINGS, Context.MODE_PRIVATE
+                ).getBoolean("double_space_period_enabled", true)
+                if (doubleSpaceEnabled && !isPrivateEditor() &&
+                    previous == " " && now - lastSpacePressAt in 1..500
+                ) {
+                    connection.deleteSurroundingText(1, 0)
+                    connection.commitText(". ", 1)
+                    lastSpacePressAt = 0L
+                } else {
+                    connection.commitText(" ", 1)
+                    lastSpacePressAt = now
+                }
                 shifted = false
             }
             "↵" -> {
@@ -253,7 +305,16 @@ class NexInputMethodService : InputMethodService() {
                 connection.commitText("\n", 1)
             }
             else -> {
-                val output = if (shifted) value.uppercase() else value
+                val inputType = currentInputEditorInfo?.inputType ?: 0
+                val sentenceCapsEnabled =
+                    inputType and InputType.TYPE_TEXT_FLAG_CAP_SENTENCES != 0
+                val beforeCursor = connection.getTextBeforeCursor(2, 0)?.toString().orEmpty()
+                val shouldCapitalizeSentence = value.length == 1 && value[0].isLetter() &&
+                    sentenceCapsEnabled &&
+                    (beforeCursor.isEmpty() || beforeCursor.last() == '\\n' ||
+                        (beforeCursor.last() in ".!?" &&
+                            (beforeCursor.length == 1 || beforeCursor[beforeCursor.lastIndex - 1] == ' ')))
+                val output = if (shifted || shouldCapitalizeSentence) value.uppercase() else value
                 connection.commitText(output, 1)
                 if (shifted) {
                     shifted = false
@@ -544,7 +605,7 @@ class NexInputMethodService : InputMethodService() {
     }
 
     private fun openSettings() {
-        val intent = android.content.Intent(this, MainActivity::class.java)
+        val intent = android.content.Intent(this, com.nexauren.keyboardnex.SettingsActivity::class.java)
             .addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK)
         startActivity(intent)
     }
@@ -614,7 +675,7 @@ class NexInputMethodService : InputMethodService() {
     }
 
     private fun isSpecial(value: String) =
-        value in setOf("⇧", "⌫", "?123", "ABC", "↵", "☺", "ESPAÇO")
+        value in setOf("⇧", "⌫", "?123", "ABC", "↵", "☺", "🌐", "ESPAÇO")
 
     private fun animatePress(view: View) {
         view.animate().scaleX(0.94f).scaleY(0.94f).setDuration(55).withEndAction {
