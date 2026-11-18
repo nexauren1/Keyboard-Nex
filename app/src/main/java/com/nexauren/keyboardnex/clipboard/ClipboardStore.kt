@@ -39,7 +39,7 @@ object ClipboardStore {
         current.add(
             0,
             Clip(
-                id = "\${now}_\${cleanText.hashCode()}",
+                id = now.toString() + "_" + cleanText.hashCode().toString(),
                 text = cleanText,
                 createdAt = now,
                 expiresAt = now + ttl,
