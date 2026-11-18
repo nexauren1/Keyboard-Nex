@@ -726,38 +726,123 @@ class NexInputMethodService : InputMethodService() {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
         }
-        header.addView(label("Emojis", 16, textColor, true), LinearLayout.LayoutParams(0, dp(38), 1f))
+        header.addView(label("Emojis", 16, textColor, true),
+            LinearLayout.LayoutParams(0, dp(38), 1f))
         header.addView(smallButton("Voltar") { showKeyboard() })
         panel.addView(header)
 
-        val emojis = listOf(
-            "😀", "😃", "😄", "😁", "😆", "😅", "😂", "🤣",
-            "😊", "🙂", "🙃", "😉", "😍", "🥰", "😘", "😎",
-            "😭", "😢", "😡", "🤔", "🤗", "🙏", "👏", "👍",
-            "❤️", "💙", "💜", "🔥", "✨", "🎉", "✅", "🚀",
-            "🌍", "☀️", "🌙", "⭐", "⚡", "🎧", "📱", "💡"
+        val categories = linkedMapOf(
+            "Sorrisos" to listOf(
+                "😀", "😃", "😄", "😁", "😆", "😅", "😂", "🤣",
+                "😊", "🙂", "🙃", "😉", "😍", "🥰", "😘", "😎",
+                "😭", "😢", "😡", "🤔", "🤗", "😴", "😇", "🤩"
+            ),
+            "Gestos" to listOf(
+                "👍", "👎", "👏", "🙏", "🤝", "💪", "👋", "👌",
+                "✌️", "🤞", "🤟", "🤘", "🫶", "👆", "👇", "☝️"
+            ),
+            "Corações" to listOf(
+                "❤️", "🧡", "💛", "💚", "💙", "💜", "🖤", "🤍",
+                "🤎", "💔", "💕", "💞", "💖", "💗", "💘", "💝"
+            ),
+            "Animais" to listOf(
+                "🐶", "🐱", "🐭", "🐹", "🐰", "🦊", "🐻", "🐼",
+                "🐨", "🐯", "🦁", "🐮", "🐸", "🐵", "🐧", "🐦"
+            ),
+            "Natureza" to listOf(
+                "🌍", "🌎", "🌏", "☀️", "🌤️", "🌧️", "⛈️", "❄️",
+                "🌙", "⭐", "🌈", "🌊", "🌸", "🌹", "🌻", "🌴"
+            ),
+            "Comida" to listOf(
+                "🍎", "🍌", "🍇", "🍉", "🍓", "🍍", "🥭", "🍔",
+                "🍕", "🍟", "🌮", "🍰", "🍫", "🍿", "☕", "🥤"
+            ),
+            "Símbolos" to listOf(
+                "🔥", "✨", "🎉", "✅", "❌", "⚡", "💯", "♻️",
+                "❤️‍🔥", "💤", "🔔", "⚠️", "❓", "❗", "➕", "➖"
+            ),
+            "Objetos" to listOf(
+                "🎧", "📱", "💡", "💻", "⌚", "📷", "🎮", "📚",
+                "✏️", "📌", "🔒", "🔑", "🚀", "🚗", "✈️", "🎵"
+            )
         )
+        var activeCategory = "Sorrisos"
+        val categoryScroller = HorizontalScrollView(this).apply {
+            isHorizontalScrollBarEnabled = false
+        }
+        val categoryRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+        categoryScroller.addView(categoryRow)
+        panel.addView(categoryScroller)
+
         val scroller = ScrollView(this)
-        val grid = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
-        emojis.chunked(8).forEach { group ->
-            val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
-            group.forEach { emoji ->
-                val button = keyButton(emoji, false).apply {
-                    textSize = 22f
-                    layoutParams = LinearLayout.LayoutParams(0, dp(43), 1f).apply {
-                        setMargins(dp(2), dp(2), dp(2), dp(2))
-                    }
-                    setOnClickListener { currentInputConnection?.commitText(emoji, 1) }
-                }
-                row.addView(button)
-            }
-            grid.addView(row)
+        val grid = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(0, dp(4), 0, dp(4))
         }
         scroller.addView(grid)
         panel.addView(scroller, LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f
         ))
+
+        fun renderCategory() {
+            grid.removeAllViews()
+            val items = if (activeCategory == "Recentes") recentEmojis() else categories[activeCategory].orEmpty()
+            if (items.isEmpty()) {
+                grid.addView(label("Ainda não há emojis recentes. Escolhe um emoji para começar.", 13, muted).apply {
+                    gravity = Gravity.CENTER
+                    setPadding(dp(16), dp(28), dp(16), dp(28))
+                })
+                return
+            }
+            items.chunked(8).forEach { group ->
+                val row = LinearLayout(this).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    gravity = Gravity.CENTER
+                }
+                group.forEach { emoji ->
+                    val button = keyButton(emoji, false).apply {
+                        textSize = 22f
+                        layoutParams = LinearLayout.LayoutParams(0, dp(47), 1f).apply {
+                            setMargins(dp(2), dp(2), dp(2), dp(2))
+                        }
+                        setOnClickListener {
+                            rememberEmoji(emoji)
+                            currentInputConnection?.commitText(emoji, 1)
+                            animatePress(this)
+                        }
+                    }
+                    row.addView(button)
+                }
+                grid.addView(row)
+            }
+        }
+
+        fun selectCategory(category: String) {
+            activeCategory = category
+            categoryRow.removeAllViews()
+            (listOf("Recentes") + categories.keys).forEach { name ->
+                categoryRow.addView(smallButton(
+                    if (name == category) "• $name" else name
+                ) { selectCategory(name) })
+            }
+            renderCategory()
+        }
+
+        // The local emoji history is stored only on this device.
+        selectCategory(activeCategory)
         host.addView(panel)
+    }
+
+    private fun recentEmojis(): List<String> {
+        val stored = getSharedPreferences(ClipboardStore.SETTINGS, Context.MODE_PRIVATE)
+            .getString("recent_emojis", "").orEmpty()
+        return stored.split("|").filter { it.isNotBlank() }.take(24)
+    }
+
+    private fun rememberEmoji(emoji: String) {
+        val recent = (listOf(emoji) + recentEmojis().filterNot { it == emoji }).take(24)
+        getSharedPreferences(ClipboardStore.SETTINGS, Context.MODE_PRIVATE)
+            .edit().putString("recent_emojis", recent.joinToString("|")).apply()
     }
 
     private fun showToolsPanel() {
