@@ -85,10 +85,11 @@ class NexInputMethodService : InputMethodService() {
                 SuggestionsInfo.RESULT_ATTR_LOOKS_LIKE_TYPO != 0
 
             Handler(Looper.getMainLooper()).post {
-                if (composingWord.isEmpty() || isPrivateEditor()) return@runOnUiThread
-                currentSuggestions = suggestions
-                currentWordIsTypo = isTypo
-                renderSuggestionStrip()
+                if (suggestionInfo != null && composingWord.isNotEmpty() && !isPrivateEditor()) {
+                    currentSuggestions = suggestions
+                    currentWordIsTypo = isTypo
+                    renderSuggestionStrip()
+                }
             }
         }
     }
@@ -336,12 +337,25 @@ class NexInputMethodService : InputMethodService() {
                 bottomRow
             )
         } else {
-            mutableListOf(
-                listOf("q", "w", "e", "r", "t", "y", "u", "i", "o", "p"),
-                listOf("a", "s", "d", "f", "g", "h", "j", "k", "l"),
-                listOf("⇧", "z", "x", "c", "v", "b", "n", "m", "⌫"),
-                bottomRow
-            )
+            val layout = keyboardPrefs.getString("keyboard_layout", "qwerty") ?: "qwerty"
+            val letterRows = when (layout) {
+                "qwertz" -> listOf(
+                    listOf("q", "w", "e", "r", "t", "z", "u", "i", "o", "p"),
+                    listOf("a", "s", "d", "f", "g", "h", "j", "k", "l"),
+                    listOf("⇧", "y", "x", "c", "v", "b", "n", "m", "⌫")
+                )
+                "azerty" -> listOf(
+                    listOf("a", "z", "e", "r", "t", "y", "u", "i", "o", "p"),
+                    listOf("q", "s", "d", "f", "g", "h", "j", "k", "l", "m"),
+                    listOf("⇧", "w", "x", "c", "v", "b", "n", "⌫")
+                )
+                else -> listOf(
+                    listOf("q", "w", "e", "r", "t", "y", "u", "i", "o", "p"),
+                    listOf("a", "s", "d", "f", "g", "h", "j", "k", "l"),
+                    listOf("⇧", "z", "x", "c", "v", "b", "n", "m", "⌫")
+                )
+            }
+            (letterRows + listOf(bottomRow)).toMutableList()
         }
         if (!numberMode && keyboardPrefs.getBoolean("number_row_enabled", true)) {
             rows.add(0, listOf("1", "2", "3", "4", "5", "6", "7", "8", "9", "0"))
